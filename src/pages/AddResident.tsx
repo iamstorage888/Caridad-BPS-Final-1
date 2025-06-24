@@ -3,6 +3,8 @@ import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
 import { db } from '../Database/firebase';
 import { collection, addDoc, getDocs } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
+
 
 interface FormData {
     lastName: string;
@@ -37,6 +39,7 @@ const AddResident: React.FC = () => {
         movedInDate: ''
     });
 
+    const navigate = useNavigate();
     const [households, setHouseholds] = useState<string[]>([]);
     const [hasFamilyHead, setHasFamilyHead] = useState(false);
     const [occupations, setOccupations] = useState<string[]>([]);
@@ -63,6 +66,8 @@ const AddResident: React.FC = () => {
         'Divorced',
         'Separated'
     ];
+
+
 
     useEffect(() => {
         const fetchOccupations = async () => {
@@ -151,56 +156,60 @@ const AddResident: React.FC = () => {
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        
-        if (!validateForm()) {
-            return;
-        }
+   const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+        return;
+    }
 
-        setIsSubmitting(true);
+    setIsSubmitting(true);
+    
+    try {
+        const finalData = {
+            ...formData,
+            movedInDate: formData.movedInDate || new Date().toISOString().split('T')[0],
+            createdAt: new Date().toISOString(),
+            // Clean up data
+            lastName: formData.lastName.trim(),
+            firstName: formData.firstName.trim(),
+            middleName: formData.middleName.trim(),
+            address: formData.address.trim(),
+        };
         
-        try {
-            const finalData = {
-                ...formData,
-                movedInDate: formData.movedInDate || new Date().toISOString().split('T')[0],
-                createdAt: new Date().toISOString(),
-                // Clean up data
-                lastName: formData.lastName.trim(),
-                firstName: formData.firstName.trim(),
-                middleName: formData.middleName.trim(),
-                address: formData.address.trim(),
-            };
-            
-            await addDoc(collection(db, 'residents'), finalData);
-            
-            // Reset form
-            setFormData({
-                lastName: '',
-                firstName: '',
-                middleName: '',
-                sex: '',
-                birthday: '',
-                occupation: '',
-                status: '',
-                address: '',
-                education: '',
-                religion: '',
-                householdNumber: '',
-                isFamilyHead: false,
-                movedInDate: ''
-            });
-            setCustomOccupation('');
-            setIsCustomOccupation(false);
-            
-            alert('✅ Resident added successfully!');
-        } catch (error: any) {
-            console.error('Error adding resident:', error);
-            alert('❌ Failed to add resident: ' + error.message);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+        await addDoc(collection(db, 'residents'), finalData);
+        
+        // Reset form
+        setFormData({
+            lastName: '',
+            firstName: '',
+            middleName: '',
+            sex: '',
+            birthday: '',
+            occupation: '',
+            status: '',
+            address: '',
+            education: '',
+            religion: '',
+            householdNumber: '',
+            isFamilyHead: false,
+            movedInDate: ''
+        });
+        setCustomOccupation('');
+        setIsCustomOccupation(false);
+        
+        alert('✅ Resident added successfully!');
+        
+        // Navigate back to residents list after successful submission
+        navigate('/residents');
+        
+    } catch (error: any) {
+        console.error('Error adding resident:', error);
+        alert('❌ Failed to add resident: ' + error.message);
+    } finally {
+        setIsSubmitting(false);
+    }
+};
 
     const renderField = (label: string, name: keyof FormData, type: string = 'text', required: boolean = false) => (
         <div style={styles.fieldGroup}>

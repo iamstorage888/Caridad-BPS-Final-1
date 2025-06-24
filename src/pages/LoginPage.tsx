@@ -251,20 +251,6 @@ const LoginPage: React.FC = () => {
             )}
           </button>
 
-          {/* Register Link */}
-          <div style={styles.registerSection}>
-            <p style={styles.registerText}>
-              Don't have an account?{' '}
-              <button
-                type="button"
-                style={styles.registerLink}
-                onClick={() => navigate('/register')}
-                disabled={loading}
-              >
-                Create Account
-              </button>
-            </p>
-          </div>
         </form>
 
         {/* Footer */}

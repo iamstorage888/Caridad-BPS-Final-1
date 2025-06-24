@@ -47,6 +47,42 @@ export interface DocumentTemplateProps {
   movedInDate?: string;
 }
 
+// Helper function to safely convert Firestore timestamp to date string
+const formatFirestoreDate = (timestamp: any): string => {
+  if (!timestamp) return 'N/A';
+  
+  try {
+    // Check if it's a Firestore Timestamp object
+    if (timestamp && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate().toLocaleDateString();
+    }
+    
+    // Check if it's already a Date object
+    if (timestamp instanceof Date) {
+      return timestamp.toLocaleDateString();
+    }
+    
+    // Check if it's a timestamp number (milliseconds)
+    if (typeof timestamp === 'number') {
+      return new Date(timestamp).toLocaleDateString();
+    }
+    
+    // Check if it's a string that can be parsed as a date
+    if (typeof timestamp === 'string') {
+      const date = new Date(timestamp);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString();
+      }
+    }
+    
+    // If none of the above, return N/A
+    return 'N/A';
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'N/A';
+  }
+};
+
 const ViewDocument: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -306,7 +342,7 @@ const ViewDocument: React.FC = () => {
               <div style={styles.infoItem}>
                 <span style={styles.infoLabel}>📅 Requested:</span>
                 <span style={styles.infoValue}>
-                  {data.createdAt ? new Date(data.createdAt.toDate()).toLocaleDateString() : 'N/A'}
+                  {formatFirestoreDate(data.createdAt)}
                 </span>
               </div>
             </div>

@@ -6,19 +6,24 @@ import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
 
 interface Resident {
+  createdAt: any;
   id: string;
   lastName: string;
   firstName: string;
   middleName: string;
   address: string;
   status: string;
+  dateAdded?: any; // Firestore timestamp or date string
 }
+
+type SortOption = 'name-asc' | 'name-desc' | 'date-newest' | 'date-oldest';
 
 const Residents: React.FC = () => {
   const navigate = useNavigate();
   const [residents, setResidents] = useState<Resident[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<SortOption>('name-asc');
 
   const fetchResidents = async () => {
     try {
@@ -33,6 +38,43 @@ const Residents: React.FC = () => {
       console.error('Error fetching residents:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sortResidents = (residents: Resident[], sortOption: SortOption): Resident[] => {
+    const sorted = [...residents];
+    
+    switch (sortOption) {
+      case 'name-asc':
+        return sorted.sort((a, b) => {
+          const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+          const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+      
+      case 'name-desc':
+        return sorted.sort((a, b) => {
+          const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+          const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+          return nameB.localeCompare(nameA);
+        });
+      
+      case 'date-newest':
+        return sorted.sort((a, b) => {
+          const dateA = a.dateAdded ? (a.dateAdded.toDate ? a.dateAdded.toDate() : new Date(a.dateAdded)) : new Date(0);
+          const dateB = b.dateAdded ? (b.dateAdded.toDate ? b.dateAdded.toDate() : new Date(b.dateAdded)) : new Date(0);
+          return dateB.getTime() - dateA.getTime();
+        });
+      
+      case 'date-oldest':
+        return sorted.sort((a, b) => {
+          const dateA = a.dateAdded ? (a.dateAdded.toDate ? a.dateAdded.toDate() : new Date(a.dateAdded)) : new Date(0);
+          const dateB = b.dateAdded ? (b.dateAdded.toDate ? b.dateAdded.toDate() : new Date(b.dateAdded)) : new Date(0);
+          return dateA.getTime() - dateB.getTime();
+        });
+      
+      default:
+        return sorted;
     }
   };
 
@@ -60,6 +102,10 @@ const Residents: React.FC = () => {
     }
   };
 
+  const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSortBy(e.target.value as SortOption);
+  };
+
   const filteredResidents = residents.filter(resident =>
     `${resident.firstName} ${resident.lastName} ${resident.middleName}`
       .toLowerCase()
@@ -67,6 +113,8 @@ const Residents: React.FC = () => {
     resident.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
     resident.status.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const sortedAndFilteredResidents = sortResidents(filteredResidents, sortBy);
 
   useEffect(() => {
     fetchResidents();
@@ -95,6 +143,21 @@ const Residents: React.FC = () => {
               style={styles.searchInput}
             />
           </div>
+          
+          <div style={styles.sortContainer}>
+            <label style={styles.sortLabel}>Sort by:</label>
+            <select 
+              value={sortBy} 
+              onChange={handleSortChange}
+              style={styles.sortSelect}
+            >
+              <option value="name-asc">Name (A-Z)</option>
+              <option value="name-desc">Name (Z-A)</option>
+              <option value="date-newest">Date Added (Newest)</option>
+              <option value="date-oldest">Date Added (Oldest)</option>
+            </select>
+          </div>
+
           <button style={styles.addButton} onClick={handleAddResident}>
             <span style={styles.buttonIcon}>➕</span>
             Add Resident
@@ -111,7 +174,7 @@ const Residents: React.FC = () => {
             <>
               <div style={styles.tableHeader}>
                 <span style={styles.resultsCount}>
-                  {filteredResidents.length} of {residents.length} residents
+                  {sortedAndFilteredResidents.length} of {residents.length} residents
                 </span>
               </div>
               <table style={styles.table}>
@@ -120,13 +183,14 @@ const Residents: React.FC = () => {
                     <th style={styles.tableHeaderCell}>Full Name</th>
                     <th style={styles.tableHeaderCell}>Address</th>
                     <th style={styles.tableHeaderCell}>Status</th>
+                    <th style={styles.tableHeaderCell}>Date Added</th>
                     <th style={styles.tableHeaderCell}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredResidents.length === 0 ? (
+                  {sortedAndFilteredResidents.length === 0 ? (
                     <tr>
-                      <td colSpan={4} style={styles.emptyState}>
+                      <td colSpan={5} style={styles.emptyState}>
                         <div style={styles.emptyStateContent}>
                           <span style={styles.emptyStateIcon}>👥</span>
                           <p style={styles.emptyStateText}>
@@ -141,7 +205,7 @@ const Residents: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredResidents.map((resident, index) => (
+                    sortedAndFilteredResidents.map((resident, index) => (
                       <tr key={resident.id} style={{
                         ...styles.tableRow,
                         backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8fafc'
@@ -165,6 +229,19 @@ const Residents: React.FC = () => {
                           }}>
                             {resident.status}
                           </span>
+                        </td>
+                        <td style={styles.tableCell}>
+                          {resident.createdAt ? (
+                            <span style={styles.dateText}>
+                              {(resident.createdAt.toDate ? resident.createdAt.toDate() : new Date(resident.createdAt)).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              })}
+                            </span>
+                          ) : (
+                            <span style={styles.noDateText}>No date</span>
+                          )}
                         </td>
                         <td style={styles.tableCell}>
                           <div style={styles.actionButtons}>
@@ -250,6 +327,28 @@ const styles: { [key: string]: React.CSSProperties } = {
     outline: 'none',
     transition: 'border-color 0.2s ease',
   },
+  sortContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  sortLabel: {
+    fontSize: '14px',
+    color: '#374151',
+    fontWeight: '500',
+    whiteSpace: 'nowrap',
+  },
+  sortSelect: {
+    padding: '8px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    fontSize: '14px',
+    backgroundColor: 'white',
+    color: '#374151',
+    cursor: 'pointer',
+    outline: 'none',
+    minWidth: '160px',
+  },
   addButton: {
     display: 'flex',
     alignItems: 'center',
@@ -264,6 +363,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '500',
     transition: 'background-color 0.2s ease',
     boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)',
+    whiteSpace: 'nowrap',
   },
   buttonIcon: {
     fontSize: '14px',
@@ -331,6 +431,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '20px',
     fontSize: '12px',
     fontWeight: '500',
+  },
+  dateText: {
+    fontSize: '13px',
+    color: '#64748b',
+  },
+  noDateText: {
+    fontSize: '13px',
+    color: '#9ca3af',
+    fontStyle: 'italic',
   },
   actionButtons: {
     display: 'flex',

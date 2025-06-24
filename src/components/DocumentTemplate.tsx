@@ -123,7 +123,7 @@ const DocumentTemplate: React.FC<DocumentTemplateProps> = ({
 
       <div style={{ marginTop: '50px', textAlign: 'right' }}>
         <p>Barangay Captain</p>
-        <p><strong>Juan Dela Cruz</strong></p>
+        <p><strong>Hon. Exelino J. Javier</strong></p>
       </div>
     </div>
   );

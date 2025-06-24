@@ -1,113 +1,209 @@
 import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import Sidebar from '../components/Sidebar';
+import LogoutButton from '../components/LogoutButton';
+import { db } from '../Database/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+
+interface Resident {
+  id: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  sex: string;
+  birthday: string;
+  occupation: string;
+  isFamilyHead: boolean;
+  age?: number;
+  householdNumber: string;
+}
 
 const ViewHouseholdMembers: React.FC = () => {
-  const [residents, setResidents] = useState<any[]>([]);
+  const { householdNumber } = useParams<{ householdNumber: string }>();
+  const [residents, setResidents] = useState<Resident[]>([]);
   const [loading, setLoading] = useState(true);
-  const householdNumber = "12345"; // Replace with useParams in your actual implementation
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [householdId, setHouseholdId] = useState<string | null>(null);
+  const handleEdit = (id: string) => {
+    navigate(`/edit-household/${id}`);
+  };
 
-  // Mock navigation function - replace with useNavigate in your actual implementation
-  const handleNavigation = (path: string) => {
-    console.log(`Navigating to: ${path}`);
+  // Calculate age from birthday
+  const calculateAge = (birthday: string): number => {
+    const today = new Date();
+    const birthDate = new Date(birthday);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
   };
 
   useEffect(() => {
     const fetchResidents = async () => {
-      setLoading(true);
+      if (!householdNumber) {
+        setError('Household number not provided');
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Mock data - replace with your Firebase logic
-        const mockData = [
-          {
-            id: '1',
-            firstName: 'Juan',
-            middleName: 'Santos',
-            lastName: 'Dela Cruz',
-            sex: 'Male',
-            birthday: '1975-03-15',
-            occupation: 'Teacher',
-            isFamilyHead: true,
-            age: 49
-          },
-          {
-            id: '2',
-            firstName: 'Maria',
-            middleName: 'Garcia',
-            lastName: 'Dela Cruz',
-            sex: 'Female',
-            birthday: '1978-07-22',
-            occupation: 'Nurse',
-            isFamilyHead: false,
-            age: 46
-          },
-          {
-            id: '3',
-            firstName: 'Jose',
-            middleName: 'Santos',
-            lastName: 'Dela Cruz',
-            sex: 'Male',
-            birthday: '2005-11-10',
-            occupation: 'Student',
-            isFamilyHead: false,
-            age: 19
-          },
-          {
-            id: '4',
-            firstName: 'Ana',
-            middleName: 'Santos',
-            lastName: 'Dela Cruz',
-            sex: 'Female',
-            birthday: '2010-09-08',
-            occupation: 'Student',
-            isFamilyHead: false,
-            age: 14
+        setLoading(true);
+        setError(null);
+
+        // First get the household document to get its ID
+        const householdQuery = query(
+          collection(db, 'households'),
+          where('householdNumber', '==', householdNumber)
+        );
+        const householdSnapshot = await getDocs(householdQuery);
+
+        if (!householdSnapshot.empty) {
+          setHouseholdId(householdSnapshot.docs[0].id);
+        } else {
+          setError('Household not found');
+          setLoading(false);
+          return;
+        }
+
+        // Then get the residents as before
+        const q = query(
+          collection(db, 'residents'),
+          where('householdNumber', '==', householdNumber)
+        );
+        const snapshot = await getDocs(q);
+
+        const data = snapshot.docs.map(doc => {
+          const residentData = { id: doc.id, ...doc.data() } as Resident;
+          if (residentData.birthday) {
+            residentData.age = calculateAge(residentData.birthday);
           }
-        ];
-        
-        setResidents(mockData);
-      } catch (error) {
-        console.error('Error fetching residents:', error);
+          return residentData;
+        });
+
+        const sortedData = data.sort((a, b) => {
+          if (a.isFamilyHead && !b.isFamilyHead) return -1;
+          if (!a.isFamilyHead && b.isFamilyHead) return 1;
+          return (b.age || 0) - (a.age || 0);
+        });
+
+        setResidents(sortedData);
+      } catch (err) {
+        console.error('Error fetching residents:', err);
+        setError('Failed to load household members. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
     fetchResidents();
-  }, []);
+  }, [householdNumber]);
 
   const familyHead = residents.find(r => r.isFamilyHead);
 
   if (loading) {
     return (
-      <div style={{ marginLeft: '260px', minHeight: '100vh', background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)' }}>
-        <div style={styles.loadingContainer}>
-          <div style={styles.spinner}></div>
-          <p style={styles.loadingText}>Loading household members...</p>
+      <div style={styles.container}>
+        <Sidebar />
+        <div style={styles.mainContent}>
+          <div style={styles.loadingContainer}>
+            <div style={styles.spinner}></div>
+            <p style={styles.loadingText}>Loading household members...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={styles.container}>
+        <Sidebar />
+        <div style={styles.mainContent}>
+          <div style={styles.errorContainer}>
+            <div style={styles.errorIcon}>⚠️</div>
+            <h2 style={styles.errorTitle}>Error Loading Data</h2>
+            <p style={styles.errorMessage}>{error}</p>
+            <button
+              onClick={() => navigate('/households')}
+              style={styles.errorButton}
+            >
+              ← Back to Households
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (residents.length === 0) {
+    return (
+      <div style={styles.container}>
+        <Sidebar />
+        <div style={styles.mainContent}>
+          <div style={styles.header}>
+            <div style={styles.headerLeft}>
+              <button
+                onClick={() => navigate('/households')}
+                style={styles.backButton}
+              >
+                <span style={styles.backArrow}>←</span>
+                <span>Back to Households</span>
+              </button>
+              <h1 style={styles.title}>Household #{householdNumber}</h1>
+            </div>
+            <LogoutButton />
+          </div>
+
+          <div style={styles.emptyContainer}>
+            <div style={styles.emptyIcon}>👥</div>
+            <h2 style={styles.emptyTitle}>No Members Found</h2>
+            <p style={styles.emptyMessage}>
+              This household doesn't have any registered members yet.
+            </p>
+            <button
+              onClick={() => navigate(`/add-resident/${householdNumber}`)}
+              style={styles.addButton}
+            >
+              ➕ Add First Member
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ marginLeft: '260px', minHeight: '100vh', background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)' }}>
-      <div style={styles.container}>
+    <div style={styles.container}>
+      <Sidebar />
+      <div style={styles.mainContent}>
         {/* Header Section */}
         <div style={styles.header}>
-          <button onClick={() => handleNavigation('/households')} style={styles.backButton}>
-            <span style={styles.backArrow}>←</span>
-            <span>Back to Households</span>
-          </button>
-          
-          <div style={styles.titleSection}>
-            <div style={styles.householdIcon}>
-              <span style={styles.iconEmoji}>🏠</span>
-            </div>
-            <div>
-              <h1 style={styles.title}>Household #{householdNumber}</h1>
-              <p style={styles.subtitle}>{residents.length} member{residents.length !== 1 ? 's' : ''} registered</p>
+          <div style={styles.headerLeft}>
+            <button
+              onClick={() => navigate('/households')}
+              style={styles.backButton}
+            >
+              <span style={styles.backArrow}>←</span>
+              <span>Back to Households</span>
+            </button>
+
+            <div style={styles.titleSection}>
+              <div style={styles.householdIcon}>
+                <span style={styles.iconEmoji}>🏠</span>
+              </div>
+              <div>
+                <h1 style={styles.title}>Household #{householdNumber}</h1>
+                <p style={styles.subtitle}>
+                  {residents.length} member{residents.length !== 1 ? 's' : ''} registered
+                </p>
+              </div>
             </div>
           </div>
+          <LogoutButton />
         </div>
 
         {/* Family Head Card */}
@@ -122,9 +218,15 @@ const ViewHouseholdMembers: React.FC = () => {
                 {`${familyHead.firstName} ${familyHead.middleName} ${familyHead.lastName}`}
               </div>
               <div style={styles.familyHeadDetails}>
-                <span style={styles.badge}>{familyHead.sex}</span>
-                <span style={styles.badge}>Age {familyHead.age}</span>
-                <span style={styles.badge}>{familyHead.occupation}</span>
+                <span style={styles.badge}>
+                  {familyHead.sex === 'Male' ? '♂️' : '♀️'} {familyHead.sex}
+                </span>
+                <span style={styles.badge}>
+                  🎂 Age {familyHead.age || 'Unknown'}
+                </span>
+                <span style={styles.badge}>
+                  💼 {familyHead.occupation}
+                </span>
               </div>
             </div>
           </div>
@@ -142,24 +244,57 @@ const ViewHouseholdMembers: React.FC = () => {
           <div style={styles.statCard}>
             <span style={styles.statIcon}>👨</span>
             <div>
-              <div style={styles.statNumber}>{residents.filter(r => r.sex === 'Male').length}</div>
+              <div style={styles.statNumber}>
+                {residents.filter(r => r.sex === 'Male').length}
+              </div>
               <div style={styles.statLabel}>Male</div>
             </div>
           </div>
           <div style={styles.statCard}>
             <span style={styles.statIcon}>👩</span>
             <div>
-              <div style={styles.statNumber}>{residents.filter(r => r.sex === 'Female').length}</div>
+              <div style={styles.statNumber}>
+                {residents.filter(r => r.sex === 'Female').length}
+              </div>
               <div style={styles.statLabel}>Female</div>
             </div>
           </div>
           <div style={styles.statCard}>
             <span style={styles.statIcon}>💼</span>
             <div>
-              <div style={styles.statNumber}>{residents.filter(r => r.occupation !== 'Student').length}</div>
+              <div style={styles.statNumber}>
+                {residents.filter(r => r.occupation && r.occupation !== 'Student').length}
+              </div>
               <div style={styles.statLabel}>Working</div>
             </div>
           </div>
+          <div style={styles.statCard}>
+            <span style={styles.statIcon}>🎓</span>
+            <div>
+              <div style={styles.statNumber}>
+                {residents.filter(r => r.occupation === 'Student').length}
+              </div>
+              <div style={styles.statLabel}>Students</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div style={styles.actionButtons}>
+          <button
+            onClick={() => navigate(`/add-resident/${householdNumber}`)}
+            style={styles.addMemberButton}
+          >
+            <span style={styles.buttonIcon}>➕</span>
+            Add New Member
+          </button>
+          <button
+            onClick={() => householdId && handleEdit(householdId)}
+            style={styles.editButton}
+          >
+            <span style={styles.buttonIcon}>✏️</span>
+            Edit Household
+          </button>
         </div>
 
         {/* Members Section */}
@@ -194,14 +329,18 @@ const ViewHouseholdMembers: React.FC = () => {
                     </div>
                   </th>
                   <th style={styles.th}>Role</th>
+                  <th style={styles.th}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {residents.map((resident, index) => (
-                  <tr key={resident.id} style={{
-                    ...styles.tableRow,
-                    animationDelay: `${index * 0.1}s`
-                  }}>
+                  <tr
+                    key={resident.id}
+                    style={{
+                      ...styles.tableRow,
+                      animationDelay: `${index * 0.1}s`
+                    }}
+                  >
                     <td style={styles.td}>
                       <div style={styles.nameCell}>
                         <div style={styles.avatar}>
@@ -221,13 +360,15 @@ const ViewHouseholdMembers: React.FC = () => {
                         {resident.sex === 'Male' ? '♂️' : '♀️'} {resident.sex}
                       </span>
                     </td>
-                    <td style={styles.td}>{resident.birthday}</td>
                     <td style={styles.td}>
-                      <span style={styles.ageBadge}>{resident.age}</span>
+                      {resident.birthday ? new Date(resident.birthday).toLocaleDateString() : 'N/A'}
+                    </td>
+                    <td style={styles.td}>
+                      <span style={styles.ageBadge}>{resident.age || 'N/A'}</span>
                     </td>
                     <td style={styles.td}>
                       <span style={styles.occupationBadge}>
-                        {resident.occupation === 'Student' ? '🎓' : '💼'} {resident.occupation}
+                        {resident.occupation === 'Student' ? '🎓' : '💼'} {resident.occupation || 'N/A'}
                       </span>
                     </td>
                     <td style={styles.td}>
@@ -236,6 +377,24 @@ const ViewHouseholdMembers: React.FC = () => {
                       ) : (
                         <span style={styles.memberBadge}>👤 Member</span>
                       )}
+                    </td>
+                    <td style={styles.td}>
+                      <div style={styles.actionCell}>
+                        <button
+                          onClick={() => navigate(`/edit-resident/${resident.id}`)}
+                          style={styles.editActionButton}
+                          title="Edit member"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => navigate(`/view-resident/${resident.id}`)}
+                          style={styles.viewActionButton}
+                          title="View details"
+                        >
+                          👁️
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -250,32 +409,114 @@ const ViewHouseholdMembers: React.FC = () => {
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
+    display: 'flex',
+    minHeight: '100vh',
+    backgroundColor: '#f8f9fa',
+  },
+  mainContent: {
+    marginLeft: '260px',
     padding: '30px',
-    maxWidth: '1200px',
-    margin: '0 auto',
+    width: 'calc(100% - 260px)',
+    minHeight: '100vh',
+    background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
   },
   loadingContainer: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100vh',
+    height: '70vh',
   },
   spinner: {
-    width: '40px',
-    height: '40px',
-    border: '4px solid #f3f3f3',
-    borderTop: '4px solid #667eea',
+    width: '50px',
+    height: '50px',
+    border: '5px solid #f3f3f3',
+    borderTop: '5px solid #667eea',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
   },
   loadingText: {
     marginTop: '20px',
     color: '#666',
+    fontSize: '18px',
+    fontWeight: '500',
+  },
+  errorContainer: {
+    textAlign: 'center',
+    padding: '60px 30px',
+    backgroundColor: 'white',
+    borderRadius: '15px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+    marginTop: '50px',
+  },
+  errorIcon: {
+    fontSize: '64px',
+    marginBottom: '20px',
+  },
+  errorTitle: {
+    fontSize: '24px',
+    fontWeight: '600',
+    color: '#dc3545',
+    marginBottom: '10px',
+  },
+  errorMessage: {
     fontSize: '16px',
+    color: '#666',
+    marginBottom: '30px',
+  },
+  errorButton: {
+    padding: '12px 24px',
+    backgroundColor: '#667eea',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+  },
+  emptyContainer: {
+    textAlign: 'center',
+    padding: '60px 30px',
+    backgroundColor: 'white',
+    borderRadius: '15px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+    marginTop: '30px',
+  },
+  emptyIcon: {
+    fontSize: '64px',
+    marginBottom: '20px',
+  },
+  emptyTitle: {
+    fontSize: '24px',
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: '10px',
+  },
+  emptyMessage: {
+    fontSize: '16px',
+    color: '#666',
+    marginBottom: '30px',
+  },
+  addButton: {
+    padding: '12px 24px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
   },
   header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: '30px',
+  },
+  headerLeft: {
+    flex: 1,
   },
   backButton: {
     display: 'flex',
@@ -294,7 +535,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
   },
   backArrow: {
-    fontSize: '18px',
+    fontSize: '16px',
     fontWeight: 'bold',
   },
   titleSection: {
@@ -325,6 +566,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '5px 0 0 0',
     color: '#666',
     fontSize: '16px',
+    fontWeight: '500',
   },
   familyHeadCard: {
     backgroundColor: 'white',
@@ -333,6 +575,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: '30px',
     boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
     border: '2px solid #667eea',
+    background: 'linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%)',
   },
   cardHeader: {
     display: 'flex',
@@ -375,7 +618,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   statsContainer: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
     gap: '20px',
     marginBottom: '30px',
   },
@@ -387,7 +630,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     gap: '15px',
-    transition: 'transform 0.3s ease',
+    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+    cursor: 'pointer',
   },
   statIcon: {
     fontSize: '24px',
@@ -401,6 +645,45 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     color: '#666',
     fontWeight: '500',
+  },
+  actionButtons: {
+    display: 'flex',
+    gap: '15px',
+    marginBottom: '30px',
+    flexWrap: 'wrap',
+  },
+  addMemberButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 24px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '10px',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 2px 10px rgba(40, 167, 69, 0.3)',
+  },
+  editButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 24px',
+    backgroundColor: '#007bff',
+    color: 'white',
+    border: 'none',
+    borderRadius: '10px',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 2px 10px rgba(0, 123, 255, 0.3)',
+  },
+  buttonIcon: {
+    fontSize: '16px',
   },
   membersSection: {
     backgroundColor: 'white',
@@ -427,6 +710,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     overflowX: 'auto',
     borderRadius: '10px',
     border: '1px solid #e9ecef',
+    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
   },
   table: {
     width: '100%',
@@ -434,15 +718,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: 'white',
   },
   tableHeader: {
-    backgroundColor: '#f8f9fa',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    color: 'white',
   },
   th: {
     padding: '16px',
     textAlign: 'left',
     fontWeight: '600',
-    color: '#495057',
     fontSize: '14px',
-    borderBottom: '2px solid #dee2e6',
+    borderBottom: 'none',
   },
   thContent: {
     display: 'flex',
@@ -480,9 +764,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     fontSize: '14px',
     fontWeight: '600',
+    boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)',
   },
   fullName: {
     fontWeight: '500',
+    color: '#2c3e50',
   },
   genderBadge: {
     padding: '6px 12px',
@@ -523,9 +809,33 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '12px',
     fontWeight: '500',
   },
+  actionCell: {
+    display: 'flex',
+    gap: '8px',
+  },
+  editActionButton: {
+    padding: '6px 10px',
+    backgroundColor: '#007bff',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '12px',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+  },
+  viewActionButton: {
+    padding: '6px 10px',
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '12px',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+  },
 };
 
-// Add CSS animations
+// Add CSS animations and hover effects
 const styleSheet = document.createElement("style");
 styleSheet.type = "text/css";
 styleSheet.innerText = `
@@ -544,19 +854,38 @@ styleSheet.innerText = `
   table tbody tr:hover {
     background-color: #f8f9fa !important;
     transform: translateX(5px) !important;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1) !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
   }
   
   button:hover {
-    background-color: #667eea !important;
-    color: white !important;
     transform: translateY(-2px) !important;
-    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3) !important;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2) !important;
   }
   
   .stat-card:hover {
     transform: translateY(-5px) !important;
     box-shadow: 0 8px 30px rgba(0,0,0,0.15) !important;
+  }
+  
+  .back-button:hover {
+    background-color: #667eea !important;
+    color: white !important;
+  }
+  
+  .add-member-button:hover {
+    background-color: #218838 !important;
+  }
+  
+  .edit-button:hover {
+    background-color: #0056b3 !important;
+  }
+  
+  .edit-action-button:hover {
+    background-color: #0056b3 !important;
+  }
+  
+  .view-action-button:hover {
+    background-color: #545b62 !important;
   }
 `;
 document.head.appendChild(styleSheet);
