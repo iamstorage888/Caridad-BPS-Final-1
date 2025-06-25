@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
@@ -25,8 +26,19 @@ const ViewHouseholdMembers: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const [householdId, setHouseholdId] = useState<string | null>(null);
+  
   const handleEdit = (id: string) => {
     navigate(`/edit-household/${id}`);
+  };
+
+  const handleViewResident = (residentId: string) => {
+    // Navigate to view resident with the resident ID
+    navigate(`/view-resident/${residentId}`);
+  };
+
+  const handleEditResident = (residentId: string) => {
+    // Navigate to edit resident with the resident ID
+    navigate(`/edit-resident/${residentId}`);
   };
 
   // Calculate age from birthday
@@ -282,13 +294,6 @@ const ViewHouseholdMembers: React.FC = () => {
         {/* Action Buttons */}
         <div style={styles.actionButtons}>
           <button
-            onClick={() => navigate(`/add-resident/${householdNumber}`)}
-            style={styles.addMemberButton}
-          >
-            <span style={styles.buttonIcon}>➕</span>
-            Add New Member
-          </button>
-          <button
             onClick={() => householdId && handleEdit(householdId)}
             style={styles.editButton}
           >
@@ -381,14 +386,14 @@ const ViewHouseholdMembers: React.FC = () => {
                     <td style={styles.td}>
                       <div style={styles.actionCell}>
                         <button
-                          onClick={() => navigate(`/edit-resident/${resident.id}`)}
+                          onClick={() => handleEditResident(resident.id)}
                           style={styles.editActionButton}
                           title="Edit member"
                         >
                           ✏️
                         </button>
                         <button
-                          onClick={() => navigate(`/view-resident/${resident.id}`)}
+                          onClick={() => handleViewResident(resident.id)}
                           style={styles.viewActionButton}
                           title="View details"
                         >

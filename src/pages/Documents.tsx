@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
 import { db } from '../Database/firebase';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, getDoc } from 'firebase/firestore';
 
 interface DocumentRequest {
   id: string;
@@ -19,24 +19,27 @@ const Documents: React.FC = () => {
   const [requests, setRequests] = useState<DocumentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
+  const [error, setError] = useState<string | null>(null);
 
   const fetchRequests = async () => {
     try {
+      setError(null);
       const snapshot = await getDocs(collection(db, 'documentRequests'));
       const docs = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
           id: doc.id,
-          fullName: data.fullName,
-          documentType: data.documentType,
-          purpose: data.purpose,
-          status: data.status,
+          fullName: data.fullName || 'Unknown',
+          documentType: data.documentType || 'Unknown Document',
+          purpose: data.purpose || 'No purpose specified',
+          status: data.status || 'pending',
           createdAt: data.createdAt?.toDate?.() || new Date(),
         };
       });
       setRequests(docs);
     } catch (error) {
       console.error('Error fetching requests:', error);
+      setError('Failed to load document requests. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -46,13 +49,63 @@ const Documents: React.FC = () => {
     fetchRequests();
   }, []);
 
+  const handleView = async (id: string) => {
+    try {
+      // Check if document exists before navigating
+      const docRef = doc(db, 'documentRequests', id);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        navigate(`/documents/view/${id}`);
+      } else {
+        alert('Document not found. It may have been deleted.');
+        // Refresh the list to remove any stale data
+        fetchRequests();
+      }
+    } catch (error) {
+      console.error('Error checking document:', error);
+      alert('Error accessing document. Please try again.');
+    }
+  };
+
+  const handleEdit = async (id: string) => {
+    try {
+      // Check if document exists before navigating
+      const docRef = doc(db, 'documentRequests', id);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        navigate(`/documents/edit/${id}`);
+      } else {
+        alert('Document not found. It may have been deleted.');
+        // Refresh the list to remove any stale data
+        fetchRequests();
+      }
+    } catch (error) {
+      console.error('Error checking document:', error);
+      alert('Error accessing document. Please try again.');
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this request?')) {
       try {
-        await deleteDoc(doc(db, 'documentRequests', id));
-        setRequests(prev => prev.filter(req => req.id !== id));
+        // Check if document exists before deleting
+        const docRef = doc(db, 'documentRequests', id);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          await deleteDoc(docRef);
+          setRequests(prev => prev.filter(req => req.id !== id));
+          alert('Document request deleted successfully.');
+        } else {
+          alert('Document not found. It may have already been deleted.');
+          // Refresh the list to remove any stale data
+          fetchRequests();
+        }
       } catch (error) {
         console.error('Error deleting document:', error);
+        alert('Error deleting document. Please try again.');
       }
     }
   };
@@ -132,10 +185,25 @@ const Documents: React.FC = () => {
             </div>
           </div>
 
+          {error && (
+            <div style={styles.errorMessage}>
+              <span style={styles.errorIcon}>⚠️</span>
+              <span>{error}</span>
+              <button 
+                onClick={fetchRequests} 
+                style={styles.retryButton}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
           <div style={styles.controls}>
             <button
               onClick={() => navigate('/documents/request')}
               style={styles.primaryButton}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#0056b3'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#007bff'}
             >
               <span style={styles.buttonIcon}>+</span>
               Request Document
@@ -172,6 +240,8 @@ const Documents: React.FC = () => {
                 <button
                   onClick={() => navigate('/documents/request')}
                   style={styles.emptyButton}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#0056b3'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#007bff'}
                 >
                   Create Request
                 </button>
@@ -236,15 +306,19 @@ const Documents: React.FC = () => {
                         <div style={styles.actionButtons}>
                           <button 
                             style={styles.viewButton} 
-                            onClick={() => navigate(`/documents/view/${req.id}`)}
+                            onClick={() => handleView(req.id)}
                             title="View Details"
+                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#138496'}
+                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#17a2b8'}
                           >
                             👁️
                           </button>
                           <button 
                             style={styles.editButton} 
-                            onClick={() => navigate(`/documents/edit/${req.id}`)}
+                            onClick={() => handleEdit(req.id)}
                             title="Edit Request"
+                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e0a800'}
+                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#ffc107'}
                           >
                             ✏️
                           </button>
@@ -252,6 +326,8 @@ const Documents: React.FC = () => {
                             style={styles.deleteButton} 
                             onClick={() => handleDelete(req.id)}
                             title="Delete Request"
+                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#c82333'}
+                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc3545'}
                           >
                             🗑️
                           </button>
@@ -334,6 +410,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
     marginTop: '4px'
+  },
+  errorMessage: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 16px',
+    backgroundColor: '#f8d7da',
+    color: '#721c24',
+    border: '1px solid #f5c6cb',
+    borderRadius: '8px',
+    marginBottom: '24px'
+  },
+  errorIcon: {
+    fontSize: '18px'
+  },
+  retryButton: {
+    padding: '4px 12px',
+    backgroundColor: '#dc3545',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px'
   },
   controls: {
     display: 'flex',

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
 import { db } from '../Database/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 interface Blotter {
@@ -13,6 +13,7 @@ interface Blotter {
   incidentDate: string;
   location: string;
   details: string;
+  status?: string; // Add status field
 }
 
 const BlotterReports: React.FC = () => {
@@ -20,17 +21,60 @@ const BlotterReports: React.FC = () => {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('all');
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Status options based on your requirements
+  const statusOptions = [
+  { value: 'filed', label: 'Filed / Logged / Recorded', color: '#8B4513' },
+  { value: 'investigating', label: 'Under Investigation', color: '#FF6347' },
+  { value: 'referred', label: 'Referred / Endorsed', color: '#4169E1' },
+  { value: 'mediation', label: 'For Mediation', color: '#32CD32' },
+  { value: 'settled', label: 'Settled / Resolved', color: '#FF1493' },
+  { value: 'ongoing', label: 'Unresolved / Ongoing', color: '#00CED1' },
+  { value: 'dismissed', label: 'Dismissed / Dropped', color: '#FFD700' },
+  { value: 'escalated', label: 'Escalated / Elevated', color: '#9932CC' },
+  { value: 'closed', label: 'Closed / Completed', color: '#FF4500' },
+  { value: 'Unscheduled', label: 'Unscheduled/Cases', color: '#2E8B57' },
+  { value: 'Scheduled', label: 'Scheduled/Cases', color: '#DC143C' }
+  ];
 
   const fetchBlotters = async () => {
     try {
       const snapshot = await getDocs(collection(db, 'blotters'));
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Blotter[];
+      const list = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(),
+        status: doc.data().status || 'filed' // Default to 'filed' if no status
+      })) as Blotter[];
       setBlotters(list);
     } catch (error) {
       console.error('Error fetching blotters:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateBlotterStatus = async (blotterId: string, newStatus: string) => {
+    if (!blotterId) return;
+    
+    setUpdatingStatus(blotterId);
+    try {
+      await updateDoc(doc(db, 'blotters', blotterId), {
+        status: newStatus
+      });
+      
+      // Update local state
+      setBlotters(prev => prev.map(blotter => 
+        blotter.id === blotterId 
+          ? { ...blotter, status: newStatus }
+          : blotter
+      ));
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Failed to update status. Please try again.');
+    } finally {
+      setUpdatingStatus(null);
     }
   };
 
@@ -76,6 +120,11 @@ const BlotterReports: React.FC = () => {
     }
   };
 
+  const getStatusInfo = (status: string) => {
+    const statusInfo = statusOptions.find(opt => opt.value === status);
+    return statusInfo || { value: status, label: status, color: '#6c757d' };
+  };
+
   const filteredBlotters = filterType === 'all' 
     ? blotters 
     : blotters.filter(b => getSeverityLevel(b.incidentType) === filterType);
@@ -119,7 +168,7 @@ const BlotterReports: React.FC = () => {
           <div style={styles.titleSection}>
             <div>
               <h1 style={styles.title}>Blotter Reports</h1>
-              <p style={styles.subtitle}>Incident reports and complaint management</p>
+              <p style={styles.subtitle}>Incident reports and complaint management with status tracking</p>
             </div>
             <div style={styles.stats}>
               <div style={styles.statCard}>
@@ -131,6 +180,12 @@ const BlotterReports: React.FC = () => {
                   {blotters.filter(b => getSeverityLevel(b.incidentType) === 'high').length}
                 </span>
                 <span style={{...styles.statLabel, color: '#c62828'}}>High Priority</span>
+              </div>
+              <div style={{...styles.statCard, backgroundColor: '#e8f5e8'}}>
+                <span style={{...styles.statNumber, color: '#2e7d32'}}>
+                  {blotters.filter(b => b.status === 'settled' || b.status === 'closed').length}
+                </span>
+                <span style={{...styles.statLabel, color: '#2e7d32'}}>Resolved</span>
               </div>
             </div>
           </div>
@@ -184,6 +239,8 @@ const BlotterReports: React.FC = () => {
               {filteredBlotters.map((b, i) => {
                 const severity = getSeverityLevel(b.incidentType);
                 const isExpanded = expandedIndex === i;
+                const statusInfo = getStatusInfo(b.status || 'filed');
+                const isUpdating = updatingStatus === b.id;
                 
                 return (
                   <div key={b.id || i} style={styles.card}>
@@ -216,6 +273,41 @@ const BlotterReports: React.FC = () => {
                         >
                           {isExpanded ? '▲' : '▼'}
                         </button>
+                      </div>
+                    </div>
+
+                    {/* Status Section - Always Visible */}
+                    <div style={styles.statusSection}>
+                      <div style={styles.statusContainer}>
+                        <span style={styles.statusLabel}>📊 Status:</span>
+                        <div style={styles.statusDropdownContainer}>
+                          <select
+                            value={b.status || 'filed'}
+                            onChange={(e) => updateBlotterStatus(b.id!, e.target.value)}
+                            style={{
+                              ...styles.statusSelect,
+                              opacity: isUpdating ? 0.6 : 1
+                            }}
+                            disabled={isUpdating}
+                          >
+                            {statusOptions.map(option => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          {isUpdating && (
+                            <div style={styles.statusSpinner}></div>
+                          )}
+                        </div>
+                        <div 
+                          style={{
+                            ...styles.statusBadge,
+                            backgroundColor: statusInfo.color,
+                          }}
+                        >
+                          {statusInfo.label}
+                        </div>
                       </div>
                     </div>
 
@@ -443,6 +535,58 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     fontWeight: '600',
     transition: 'background-color 0.2s ease'
+  },
+  statusSection: {
+    padding: '16px 20px',
+    backgroundColor: '#f8f9fa',
+    borderTop: '1px solid #e9ecef'
+  },
+  statusContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flexWrap: 'wrap' as const
+  },
+  statusLabel: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#495057',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  statusDropdownContainer: {
+    position: 'relative' as const,
+    display: 'flex',
+    alignItems: 'center'
+  },
+  statusSelect: {
+    padding: '6px 10px',
+    border: '1px solid #ced4da',
+    borderRadius: '4px',
+    fontSize: '13px',
+    backgroundColor: '#fff',
+    cursor: 'pointer',
+    minWidth: '200px'
+  },
+  statusBadge: {
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '11px',
+    fontWeight: '700',
+    color: 'white',
+    letterSpacing: '0.5px',
+    marginLeft: 'auto'
+  },
+  statusSpinner: {
+    position: 'absolute' as const,
+    right: '8px',
+    width: '16px',
+    height: '16px',
+    border: '2px solid #f3f3f3',
+    borderTop: '2px solid #007bff',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
   },
   expandedContent: {
     backgroundColor: '#ffffff'
