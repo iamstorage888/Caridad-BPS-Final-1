@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
 import { db } from '../Database/firebase';
-import { collection, getDocs, doc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
-interface Blotter {
+interface ArchivedBlotter {
   id?: string;
   complainant: string;
   respondent: string;
@@ -13,114 +13,60 @@ interface Blotter {
   incidentDate: string;
   location: string;
   details: string;
-  status?: string; // Add status field
+  status: string;
+  archivedDate: string;
 }
 
-const BlotterReports: React.FC = () => {
-  const [blotters, setBlotters] = useState<Blotter[]>([]);
+const Archives: React.FC = () => {
+  const [archivedBlotters, setArchivedBlotters] = useState<ArchivedBlotter[]>([]);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('all');
-  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Status options based on your requirements
-  const statusOptions = [
-  { value: 'filed', label: 'Filed / Logged / Recorded', color: '#8B4513' },
-  { value: 'investigating', label: 'Under Investigation', color: '#FF6347' },
-  { value: 'referred', label: 'Referred / Endorsed', color: '#4169E1' },
-  { value: 'mediation', label: 'For Mediation', color: '#32CD32' },
-  { value: 'settled', label: 'Settled / Resolved', color: '#FF1493' },
-  { value: 'ongoing', label: 'Unresolved / Ongoing', color: '#00CED1' },
-  { value: 'dismissed', label: 'Dismissed / Dropped', color: '#FFD700' },
-  { value: 'escalated', label: 'Escalated / Elevated', color: '#9932CC' },
-  { value: 'closed', label: 'Closed / Completed', color: '#FF4500' },
-  { value: 'Unscheduled', label: 'Unscheduled/Cases', color: '#2E8B57' },
-  { value: 'Scheduled', label: 'Scheduled/Cases', color: '#DC143C' }
-  ];
-
-  const fetchBlotters = async () => {
+  const fetchArchivedBlotters = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'blotters'));
+      const snapshot = await getDocs(collection(db, 'archived_blotters'));
       const list = snapshot.docs.map(doc => ({ 
         id: doc.id, 
-        ...doc.data(),
-        status: doc.data().status || 'filed' // Default to 'filed' if no status
-      })) as Blotter[];
-      setBlotters(list);
+        ...doc.data()
+      })) as ArchivedBlotter[];
+      
+      // Sort by archived date (newest first)
+      list.sort((a, b) => new Date(b.archivedDate).getTime() - new Date(a.archivedDate).getTime());
+      setArchivedBlotters(list);
     } catch (error) {
-      console.error('Error fetching blotters:', error);
+      console.error('Error fetching archived blotters:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const archiveBlotter = async (blotter: Blotter) => {
-    if (!blotter.id) return;
-
-    try {
-      // Add to archived collection
-      await addDoc(collection(db, 'archived_blotters'), {
-        ...blotter,
-        archivedDate: new Date().toISOString()
-      });
-
-      // Remove from active blotters
-      await deleteDoc(doc(db, 'blotters', blotter.id));
-
-      // Update local state
-      setBlotters(prev => prev.filter(b => b.id !== blotter.id));
-      
-      // Show success message
-      alert(`Report has been archived successfully. You can find it in the Archives section.`);
-    } catch (error) {
-      console.error('Error archiving blotter:', error);
-      throw error;
-    }
-  };
-
-  const updateBlotterStatus = async (blotterId: string, newStatus: string) => {
+  const permanentlyDeleteBlotter = async (blotterId: string) => {
     if (!blotterId) return;
     
-    setUpdatingStatus(blotterId);
+    const confirmed = window.confirm(
+      'Are you sure you want to permanently delete this archived report? This action cannot be undone.'
+    );
+    
+    if (!confirmed) return;
+    
+    setDeletingId(blotterId);
     try {
-      // Update status in database
-      await updateDoc(doc(db, 'blotters', blotterId), {
-        status: newStatus
-      });
-      
-      // Update local state
-      setBlotters(prev => prev.map(blotter => 
-        blotter.id === blotterId 
-          ? { ...blotter, status: newStatus }
-          : blotter
-      ));
-
-      // Check if status is 'closed' or 'settled' and archive automatically
-      if (newStatus === 'closed' || newStatus === 'settled') {
-        const blotterToArchive = blotters.find(b => b.id === blotterId);
-        if (blotterToArchive) {
-          // Add a small delay to ensure the status update is visible
-          setTimeout(async () => {
-            try {
-              await archiveBlotter({ ...blotterToArchive, status: newStatus });
-            } catch (error) {
-              console.error('Error during auto-archiving:', error);
-              alert('Status updated but failed to archive. Please try archiving manually.');
-            }
-          }, 500);
-        }
-      }
+      await deleteDoc(doc(db, 'archived_blotters', blotterId));
+      setArchivedBlotters(prev => prev.filter(blotter => blotter.id !== blotterId));
+      alert('Report permanently deleted successfully.');
     } catch (error) {
-      console.error('Error updating status:', error);
-      alert('Failed to update status. Please try again.');
+      console.error('Error deleting archived blotter:', error);
+      alert('Failed to delete report. Please try again.');
     } finally {
-      setUpdatingStatus(null);
+      setDeletingId(null);
     }
   };
 
   useEffect(() => {
-    fetchBlotters();
+    fetchArchivedBlotters();
   }, []);
 
   const toggleExpand = (index: number) => {
@@ -161,14 +107,9 @@ const BlotterReports: React.FC = () => {
     }
   };
 
-  const getStatusInfo = (status: string) => {
-    const statusInfo = statusOptions.find(opt => opt.value === status);
-    return statusInfo || { value: status, label: status, color: '#6c757d' };
-  };
-
   const filteredBlotters = filterType === 'all' 
-    ? blotters 
-    : blotters.filter(b => getSeverityLevel(b.incidentType) === filterType);
+    ? archivedBlotters 
+    : archivedBlotters.filter(b => getSeverityLevel(b.incidentType) === filterType);
 
   const formatDate = (dateString: string) => {
     try {
@@ -176,6 +117,20 @@ const BlotterReports: React.FC = () => {
         year: 'numeric',
         month: 'short',
         day: 'numeric'
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const formatDateTime = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
       });
     } catch {
       return dateString;
@@ -190,7 +145,7 @@ const BlotterReports: React.FC = () => {
           <LogoutButton />
           <div style={styles.loadingContainer}>
             <div style={styles.spinner}></div>
-            <p style={styles.loadingText}>Loading blotter reports...</p>
+            <p style={styles.loadingText}>Loading archived reports...</p>
           </div>
         </div>
       </div>
@@ -208,47 +163,37 @@ const BlotterReports: React.FC = () => {
         <div style={styles.content}>
           <div style={styles.titleSection}>
             <div>
-              <h1 style={styles.title}>Blotter Reports</h1>
-              <p style={styles.subtitle}>Incident reports and complaint management with status tracking</p>
+              <h1 style={styles.title}>📁 Archived Reports</h1>
+              <p style={styles.subtitle}>Completed and closed blotter reports archive</p>
             </div>
             <div style={styles.stats}>
               <div style={styles.statCard}>
-                <span style={styles.statNumber}>{blotters.length}</span>
-                <span style={styles.statLabel}>Active Reports</span>
+                <span style={styles.statNumber}>{archivedBlotters.length}</span>
+                <span style={styles.statLabel}>Archived Reports</span>
               </div>
-              <div style={{...styles.statCard, backgroundColor: '#ffebee'}}>
-                <span style={{...styles.statNumber, color: '#c62828'}}>
-                  {blotters.filter(b => getSeverityLevel(b.incidentType) === 'high').length}
+              <div style={{...styles.statCard, backgroundColor: '#e8f5e8'}}>
+                <span style={{...styles.statNumber, color: '#2e7d32'}}>
+                  {archivedBlotters.filter(b => b.status === 'closed').length}
                 </span>
-                <span style={{...styles.statLabel, color: '#c62828'}}>High Priority</span>
+                <span style={{...styles.statLabel, color: '#2e7d32'}}>Closed Cases</span>
               </div>
               <div style={{...styles.statCard, backgroundColor: '#fff3e0'}}>
                 <span style={{...styles.statNumber, color: '#ef6c00'}}>
-                  {blotters.filter(b => b.status === 'investigating' || b.status === 'ongoing').length}
+                  {archivedBlotters.filter(b => b.status === 'settled').length}
                 </span>
-                <span style={{...styles.statLabel, color: '#ef6c00'}}>In Progress</span>
+                <span style={{...styles.statLabel, color: '#ef6c00'}}>Settled Cases</span>
               </div>
             </div>
           </div>
 
           <div style={styles.controls}>
-            <div style={styles.leftControls}>
-              <button
-                onClick={() => navigate('/add-blotter')}
-                style={styles.primaryButton}
-              >
-                <span style={styles.buttonIcon}>+</span>
-                Add Blotter Report
-              </button>
-
-              <button
-                onClick={() => navigate('/archives')}
-                style={styles.archiveButton}
-              >
-                <span style={styles.buttonIcon}>📁</span>
-                Archives
-              </button>
-            </div>
+            <button
+              onClick={() => navigate('/blotter')}
+              style={styles.backButton}
+            >
+              <span style={styles.buttonIcon}>←</span>
+              Back to Active Reports
+            </button>
 
             <div style={styles.filterContainer}>
               <label style={styles.filterLabel}>Filter by priority:</label>
@@ -267,31 +212,22 @@ const BlotterReports: React.FC = () => {
 
           {filteredBlotters.length === 0 ? (
             <div style={styles.emptyState}>
-              <div style={styles.emptyIcon}>📋</div>
+              <div style={styles.emptyIcon}>🗃️</div>
               <h3 style={styles.emptyTitle}>
-                {filterType === 'all' ? 'No active blotter reports found' : `No ${filterType} priority reports found`}
+                {filterType === 'all' ? 'No archived reports found' : `No ${filterType} priority archived reports found`}
               </h3>
               <p style={styles.emptyText}>
                 {filterType === 'all' 
-                  ? 'Start by adding your first incident report.' 
+                  ? 'Closed and completed reports will appear here automatically.' 
                   : 'Try selecting a different priority filter.'}
               </p>
-              {filterType === 'all' && (
-                <button
-                  onClick={() => navigate('/add-blotter')}
-                  style={styles.emptyButton}
-                >
-                  Add Report
-                </button>
-              )}
             </div>
           ) : (
             <div style={styles.reportsGrid}>
               {filteredBlotters.map((b, i) => {
                 const severity = getSeverityLevel(b.incidentType);
                 const isExpanded = expandedIndex === i;
-                const statusInfo = getStatusInfo(b.status || 'filed');
-                const isUpdating = updatingStatus === b.id;
+                const isDeleting = deletingId === b.id;
                 
                 return (
                   <div key={b.id || i} style={styles.card}>
@@ -327,44 +263,27 @@ const BlotterReports: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Status Section - Always Visible */}
-                    <div style={styles.statusSection}>
-                      <div style={styles.statusContainer}>
-                        <span style={styles.statusLabel}>📊 Status:</span>
-                        <div style={styles.statusDropdownContainer}>
-                          <select
-                            value={b.status || 'filed'}
-                            onChange={(e) => updateBlotterStatus(b.id!, e.target.value)}
-                            style={{
-                              ...styles.statusSelect,
-                              opacity: isUpdating ? 0.6 : 1
-                            }}
-                            disabled={isUpdating}
-                          >
-                            {statusOptions.map(option => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          {isUpdating && (
-                            <div style={styles.statusSpinner}></div>
-                          )}
+                    {/* Archive Info Section */}
+                    <div style={styles.archiveSection}>
+                      <div style={styles.archiveInfo}>
+                        <span style={styles.archiveLabel}>🗄️ Status:</span>
+                        <div style={styles.statusBadge}>
+                          {b.status === 'closed' ? 'CLOSED / COMPLETED' : 'SETTLED / RESOLVED'}
                         </div>
-                        <div 
-                          style={{
-                            ...styles.statusBadge,
-                            backgroundColor: statusInfo.color,
-                          }}
-                        >
-                          {statusInfo.label}
-                        </div>
+                        <span style={styles.archiveDate}>
+                          📆 Archived: {formatDateTime(b.archivedDate)}
+                        </span>
                       </div>
-                      {(b.status === 'closed' || b.status === 'settled') && (
-                        <div style={styles.archiveNotice}>
-                          ℹ️ This report will be automatically archived
-                        </div>
-                      )}
+                      <button 
+                        onClick={() => permanentlyDeleteBlotter(b.id!)}
+                        style={{
+                          ...styles.deleteButton,
+                          opacity: isDeleting ? 0.6 : 1
+                        }}
+                        disabled={isDeleting}
+                      >
+                        {isDeleting ? '🔄' : '🗑️'} Delete
+                      </button>
                     </div>
 
                     {isExpanded && (
@@ -447,18 +366,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column' as const,
     alignItems: 'center',
     padding: '16px 20px',
-    backgroundColor: '#e3f2fd',
+    backgroundColor: '#f3e5f5',
     borderRadius: '8px',
     minWidth: '100px'
   },
   statNumber: {
     fontSize: '24px',
     fontWeight: '700',
-    color: '#1976d2'
+    color: '#7b1fa2'
   },
   statLabel: {
     fontSize: '12px',
-    color: '#1976d2',
+    color: '#7b1fa2',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
     marginTop: '4px'
@@ -470,16 +389,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: '24px',
     gap: '16px'
   },
-  leftControls: {
-    display: 'flex',
-    gap: '12px'
-  },
-  primaryButton: {
+  backButton: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: '12px 24px',
-    backgroundColor: '#28a745',
+    backgroundColor: '#6c757d',
     color: '#fff',
     border: 'none',
     borderRadius: '8px',
@@ -487,22 +402,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '16px',
     fontWeight: '500',
     transition: 'all 0.2s ease',
-    boxShadow: '0 2px 4px rgba(40, 167, 69, 0.3)'
-  },
-  archiveButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '12px 24px',
-    backgroundColor: '#7b1fa2',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    fontWeight: '500',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 4px rgba(123, 31, 162, 0.3)'
+    boxShadow: '0 2px 4px rgba(108, 117, 125, 0.3)'
   },
   buttonIcon: {
     fontSize: '18px',
@@ -536,7 +436,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '12px',
     overflow: 'hidden',
     transition: 'all 0.2s ease',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+    opacity: 0.95
   },
   cardHeader: {
     display: 'flex',
@@ -611,38 +512,27 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '600',
     transition: 'background-color 0.2s ease'
   },
-  statusSection: {
+  archiveSection: {
     padding: '16px 20px',
-    backgroundColor: '#f8f9fa',
-    borderTop: '1px solid #e9ecef'
+    backgroundColor: '#f1f3f4',
+    borderTop: '1px solid #e9ecef',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
   },
-  statusContainer: {
+  archiveInfo: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
     flexWrap: 'wrap' as const
   },
-  statusLabel: {
+  archiveLabel: {
     fontSize: '14px',
     fontWeight: '600',
     color: '#495057',
     display: 'flex',
     alignItems: 'center',
     gap: '6px'
-  },
-  statusDropdownContainer: {
-    position: 'relative' as const,
-    display: 'flex',
-    alignItems: 'center'
-  },
-  statusSelect: {
-    padding: '6px 10px',
-    border: '1px solid #ced4da',
-    borderRadius: '4px',
-    fontSize: '13px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    minWidth: '200px'
   },
   statusBadge: {
     padding: '4px 10px',
@@ -651,27 +541,26 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '700',
     color: 'white',
     letterSpacing: '0.5px',
-    marginLeft: 'auto'
+    backgroundColor: '#28a745'
   },
-  statusSpinner: {
-    position: 'absolute' as const,
-    right: '8px',
-    width: '16px',
-    height: '16px',
-    border: '2px solid #f3f3f3',
-    borderTop: '2px solid #007bff',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite'
+  archiveDate: {
+    fontSize: '13px',
+    color: '#6c757d',
+    fontStyle: 'italic' as const
   },
-  archiveNotice: {
-    fontSize: '12px',
-    color: '#7b1fa2',
-    fontStyle: 'italic' as const,
-    marginTop: '8px',
-    padding: '6px 10px',
-    backgroundColor: '#f3e5f5',
-    borderRadius: '4px',
-    border: '1px solid #e1bee7'
+  deleteButton: {
+    padding: '8px 16px',
+    backgroundColor: '#dc3545',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '13px',
+    cursor: 'pointer',
+    fontWeight: '500',
+    transition: 'background-color 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px'
   },
   expandedContent: {
     backgroundColor: '#ffffff'
@@ -740,16 +629,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '0 0 24px 0',
     maxWidth: '400px'
   },
-  emptyButton: {
-    padding: '12px 24px',
-    backgroundColor: '#28a745',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    fontWeight: '500'
-  },
   loadingContainer: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -762,7 +641,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '32px',
     height: '32px',
     border: '3px solid #f3f3f3',
-    borderTop: '3px solid #28a745',
+    borderTop: '3px solid #7b1fa2',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite'
   },
@@ -773,14 +652,4 @@ const styles: { [key: string]: React.CSSProperties } = {
   }
 };
 
-// Add CSS animation for spinner
-const styleSheet = document.createElement('style');
-styleSheet.textContent = `
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-`;
-document.head.appendChild(styleSheet);
-
-export default BlotterReports;
+export default Archives;

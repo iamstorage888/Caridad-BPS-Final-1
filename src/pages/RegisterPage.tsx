@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../Database/firebase';
 import Sidebar from '../components/Sidebar';
@@ -10,15 +10,18 @@ const AddUser: React.FC = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    role: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -29,7 +32,7 @@ const AddUser: React.FC = () => {
   };
 
   const validateForm = (): boolean => {
-    if (!formData.email || !formData.password || !formData.confirmPassword) {
+    if (!formData.email || !formData.password || !formData.confirmPassword || !formData.role) {
       setError('All fields are required');
       return false;
     }
@@ -62,6 +65,9 @@ const AddUser: React.FC = () => {
     setError('');
     setSuccess('');
 
+    // Store the current user before creating a new one
+    const currentUser = auth.currentUser;
+
     try {
       // Create user with Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
@@ -70,20 +76,29 @@ const AddUser: React.FC = () => {
         formData.password
       );
 
-      // Add user data to Firestore
+      // Add user data to Firestore with role
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         uid: userCredential.user.uid,
         email: formData.email,
+        role: formData.role,
         createdAt: new Date().toISOString()
       });
 
-      setSuccess('User created successfully!');
+      // Sign out the newly created user to prevent auto-login
+      await signOut(auth);
+
+      // If there was a current user before, they would need to sign back in
+      // Note: This is a limitation of the client-side approach
+      // For production, consider using Firebase Admin SDK on the backend
+
+      setSuccess(`User created successfully with ${formData.role} role!`);
       
       // Reset form
       setFormData({
         email: '',
         password: '',
-        confirmPassword: ''
+        confirmPassword: '',
+        role: ''
       });
 
       // Navigate back to users page after a short delay
@@ -115,6 +130,14 @@ const AddUser: React.FC = () => {
 
   const handleCancel = () => {
     navigate('/users');
+  };
+
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
+
+  const toggleConfirmPasswordVisibility = () => {
+    setShowConfirmPassword(!showConfirmPassword);
   };
 
   return (
@@ -168,13 +191,54 @@ const AddUser: React.FC = () => {
                 </div>
 
                 <div style={styles.formGroup}>
+                  <label style={styles.label} htmlFor="role">
+                    <span style={styles.labelIcon}>👤</span>
+                    User Role
+                  </label>
+                  <div style={styles.inputWrapper}>
+                    <select
+                      id="role"
+                      name="role"
+                      value={formData.role}
+                      onChange={handleInputChange}
+                      onFocus={() => setFocusedField('role')}
+                      onBlur={() => setFocusedField(null)}
+                      style={{
+                        ...styles.select,
+                        ...(focusedField === 'role' ? styles.inputFocused : {})
+                      }}
+                      disabled={loading}
+                    >
+                      <option value="">Select a role...</option>
+                      <option value="secretary">Secretary (Full Access)</option>
+                      <option value="clerk">BSPO (Household & Residency Only)</option>
+                    </select>
+                    <div style={styles.inputUnderline}></div>
+                  </div>
+                  <div style={styles.roleDescription}>
+                    {formData.role === 'secretary' && (
+                      <p style={styles.roleDescText}>
+                        <span style={styles.roleDescIcon}>🔐</span>
+                        Full access to all features including users, documents, and blotter reports
+                      </p>
+                    )}
+                    {formData.role === 'clerk' && (
+                      <p style={styles.roleDescText}>
+                        <span style={styles.roleDescIcon}>🏠</span>
+                        Limited access to household and residency management only
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div style={styles.formGroup}>
                   <label style={styles.label} htmlFor="password">
                     <span style={styles.labelIcon}>🔒</span>
                     Password
                   </label>
                   <div style={styles.inputWrapper}>
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       id="password"
                       name="password"
                       value={formData.password}
@@ -183,11 +247,22 @@ const AddUser: React.FC = () => {
                       onBlur={() => setFocusedField(null)}
                       style={{
                         ...styles.input,
+                        ...styles.passwordInput,
                         ...(focusedField === 'password' ? styles.inputFocused : {})
                       }}
                       placeholder="Minimum 6 characters"
                       disabled={loading}
                     />
+                    <button
+                      type="button"
+                      onClick={togglePasswordVisibility}
+                      style={styles.eyeButton}
+                      disabled={loading}
+                    >
+                      <span style={styles.eyeIcon}>
+                        {showPassword ? '👁️' : '👁️‍🗨️'}
+                      </span>
+                    </button>
                     <div style={styles.inputUnderline}></div>
                   </div>
                 </div>
@@ -199,7 +274,7 @@ const AddUser: React.FC = () => {
                   </label>
                   <div style={styles.inputWrapper}>
                     <input
-                      type="password"
+                      type={showConfirmPassword ? "text" : "password"}
                       id="confirmPassword"
                       name="confirmPassword"
                       value={formData.confirmPassword}
@@ -208,11 +283,22 @@ const AddUser: React.FC = () => {
                       onBlur={() => setFocusedField(null)}
                       style={{
                         ...styles.input,
+                        ...styles.passwordInput,
                         ...(focusedField === 'confirmPassword' ? styles.inputFocused : {})
                       }}
                       placeholder="Re-enter password"
                       disabled={loading}
                     />
+                    <button
+                      type="button"
+                      onClick={toggleConfirmPasswordVisibility}
+                      style={styles.eyeButton}
+                      disabled={loading}
+                    >
+                      <span style={styles.eyeIcon}>
+                        {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
+                      </span>
+                    </button>
                     <div style={styles.inputUnderline}></div>
                   </div>
                 </div>
@@ -420,6 +506,50 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '500',
     boxSizing: 'border-box'
   },
+  passwordInput: {
+    paddingRight: '60px'
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: '12px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    width: '40px',
+    height: '40px',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '8px',
+    transition: 'all 0.2s ease',
+    zIndex: 10
+  },
+  eyeIcon: {
+    fontSize: '18px',
+    color: '#64748b',
+    transition: 'color 0.2s ease'
+  },
+  select: {
+    width: '100%',
+    padding: '16px 20px',
+    border: 'none',
+    borderBottom: '2px solid #e1e8ed',
+    borderRadius: '12px 12px 0 0',
+    fontSize: '16px',
+    backgroundColor: '#f8fafc',
+    transition: 'all 0.3s ease',
+    outline: 'none',
+    fontWeight: '500',
+    boxSizing: 'border-box',
+    cursor: 'pointer',
+    appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 16px center',
+    backgroundSize: '18px'
+  },
   inputFocused: {
     backgroundColor: '#ffffff',
     borderBottomColor: '#667eea',
@@ -434,6 +564,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '0%',
     background: 'linear-gradient(90deg, #667eea, #764ba2)',
     transition: 'width 0.3s ease'
+  },
+  roleDescription: {
+    marginTop: '8px'
+  },
+  roleDescText: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '14px',
+    color: '#64748b',
+    backgroundColor: '#f1f5f9',
+    padding: '12px 16px',
+    borderRadius: '8px',
+    margin: 0,
+    fontWeight: '500',
+    border: '1px solid #e2e8f0'
+  },
+  roleDescIcon: {
+    fontSize: '16px'
   },
   errorMessage: {
     display: 'flex',
@@ -572,14 +721,25 @@ styleSheet.textContent = `
   }
 
   /* Input focus effects */
-  input:focus + .input-underline {
+  input:focus + .input-underline,
+  select:focus + .input-underline {
     width: 100% !important;
   }
 
-  input:disabled {
+  input:disabled,
+  select:disabled {
     background-color: #f1f5f9 !important;
     opacity: 0.7;
     cursor: not-allowed;
+  }
+
+  /* Eye button hover effects */
+  button[type="button"]:hover .eye-icon {
+    color: #667eea !important;
+  }
+
+  button[type="button"]:hover {
+    background-color: rgba(102, 126, 234, 0.1) !important;
   }
 
   /* Button hover effects */
@@ -638,6 +798,31 @@ styleSheet.textContent = `
   button[type="submit"]:active:before {
     width: 300px;
     height: 300px;
+  }
+
+  /* Select dropdown styling */
+  select option {
+    padding: 12px;
+    background: white;
+    color: #2c3e50;
+  }
+
+  select option:hover {
+    background: #f8fafc;
+  }
+
+  /* Eye button specific styling */
+  .eye-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .eye-button:disabled:hover {
+    background-color: transparent !important;
+  }
+
+  .eye-button:disabled .eye-icon {
+    color: #94a3b8 !important;
   }
 `;
 document.head.appendChild(styleSheet);

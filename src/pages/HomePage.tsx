@@ -38,7 +38,6 @@ const HomePage: React.FC = () => {
   ];
 
   // Function to calculate age from date of birth
-  // Enhanced calculateAge function with debugging and multiple date format support
   const calculateAge = (dateOfBirth: string): number => {
     if (!dateOfBirth) {
       console.log('No date of birth provided');
@@ -86,15 +85,54 @@ const HomePage: React.FC = () => {
       age--;
     }
 
-    // Debug logging
-    console.log(`DOB: ${dateOfBirth}, Calculated Age: ${age}`);
-
     return age;
   };
 
+  // Function to check if resident has voter/national ID
+  const hasVoterOrNationalID = (data: any): boolean => {
+    // Check for common field names that might contain voter ID or national ID
+    const voterIdFields = [
+      'voterID', 'voter_id', 'voterId', 'votersId', 'voters_id',
+      'voterIdPicture', 'voter_id_picture', 'voterIdImage', 'voter_id_image'
+    ];
+    
+    const nationalIdFields = [
+      'nationalID', 'national_id', 'nationalId', 'nationalIdPicture', 
+      'national_id_picture', 'nationalIdImage', 'national_id_image',
+      'philId', 'phil_id', 'philsysId', 'philsys_id'
+    ];
+
+    // Check for any voter ID fields
+    for (const field of voterIdFields) {
+      if (data[field] && data[field] !== '' && data[field] !== null) {
+        console.log(`Found voter ID in field: ${field}`);
+        return true;
+      }
+    }
+
+    // Check for any national ID fields
+    for (const field of nationalIdFields) {
+      if (data[field] && data[field] !== '' && data[field] !== null) {
+        console.log(`Found national ID in field: ${field}`);
+        return true;
+      }
+    }
+
+    // Additional check for generic ID fields that might contain voter/national ID
+    const genericIdFields = ['idPicture', 'id_picture', 'idImage', 'id_image', 'validId', 'valid_id'];
+    for (const field of genericIdFields) {
+      if (data[field] && data[field] !== '' && data[field] !== null) {
+        // You might want to add additional logic here to determine if it's specifically a voter/national ID
+        console.log(`Found ID in generic field: ${field}`);
+        return true;
+      }
+    }
+
+    return false;
+  };
 
   useEffect(() => {
-    // Enhanced fetchResidents function with registered voters calculation
+    // Enhanced fetchResidents function with voter ID check
     const fetchResidents = async () => {
       const residentSnapshot = await getDocs(collection(db, 'residents'));
       const householdSnapshot = await getDocs(collection(db, 'households'));
@@ -103,7 +141,7 @@ const HomePage: React.FC = () => {
       let males = 0;
       let females = 0;
       let seniors = 0;
-      let voters = 0; // New counter for registered voters
+      let voters = 0; // Updated: Count based on ID submission instead of age
 
       const occupationMap: { [key: string]: number } = {};
       const purokMap: { [key: string]: number } = {};
@@ -121,31 +159,31 @@ const HomePage: React.FC = () => {
       console.log('=== DEBUGGING RESIDENT CALCULATIONS ===');
       console.log('Total residents found:', residentSnapshot.size);
       
-      // Track all possible date field names
-      const dateFields = new Set();
-      let validDatesCount = 0;
-      let invalidDatesCount = 0;
+      // Track all possible ID field names
+      const idFields = new Set();
+      let votersWithIdCount = 0;
+      let votersWithoutIdCount = 0;
       
       let index = 0;
       residentSnapshot.forEach((doc) => {
         total++;
         const data = doc.data();
 
-        // Check all possible date field names in the first few documents
+        // Check all possible ID field names in the first few documents
         if (index < 10) {
           Object.keys(data).forEach(key => {
-            if (key.toLowerCase().includes('date') || key.toLowerCase().includes('birth')) {
-              dateFields.add(key);
+            if (key.toLowerCase().includes('id') || key.toLowerCase().includes('voter') || key.toLowerCase().includes('national')) {
+              idFields.add(key);
             }
           });
         }
 
-        // Debug: Log first few residents' data with ALL fields
+        // Debug: Log first few residents' data with ID fields
         if (index < 3) {
           console.log(`=== Resident ${index + 1} (${doc.id}) ===`);
           console.log('All fields:', Object.keys(data));
-          console.log('Date-related fields:', Object.keys(data).filter(key => 
-            key.toLowerCase().includes('date') || key.toLowerCase().includes('birth')
+          console.log('ID-related fields:', Object.keys(data).filter(key => 
+            key.toLowerCase().includes('id') || key.toLowerCase().includes('voter') || key.toLowerCase().includes('national')
           ).map(key => ({ [key]: data[key] })));
           console.log('Sex:', data.sex);
           console.log('Occupation:', data.occupation);
@@ -154,41 +192,37 @@ const HomePage: React.FC = () => {
         if (data.sex === 'Male') males++;
         if (data.sex === 'Female') females++;
 
-        // Try multiple possible date field names
+        // Check for voter/national ID submission
+        const hasValidId = hasVoterOrNationalID(data);
+        if (hasValidId) {
+          voters++;
+          votersWithIdCount++;
+          console.log(`🗳️ REGISTERED VOTER (with ID): ${data.firstName} ${data.lastName}`);
+        } else {
+          votersWithoutIdCount++;
+          if (index < 10) {
+            console.log(`❌ No voter/national ID found for: ${data.firstName} ${data.lastName}`);
+          }
+        }
+
+        // Calculate age for senior citizens
         const possibleDateFields = ['dateOfBirth', 'birthDate', 'date_of_birth', 'birth_date', 'birthday'];
         let birthDate = null;
-        let fieldUsed = null;
 
         for (const field of possibleDateFields) {
           if (data[field]) {
             birthDate = data[field];
-            fieldUsed = field;
             break;
           }
         }
 
         if (birthDate) {
-          validDatesCount++;
-          console.log(`Processing birth date for resident ${index + 1}: Field="${fieldUsed}", Value="${birthDate}", Type="${typeof birthDate}"`);
-          
           const age = calculateAge(birthDate);
-          console.log(`Calculated age: ${age}`);
           
           // Count senior citizens (60+)
           if (age >= 60) {
             seniors++;
             console.log(`🎉 SENIOR CITIZEN FOUND: Age ${age}, DOB: ${birthDate}`);
-          }
-          
-          // Count registered voters (18+)
-          if (age >= 18) {
-            voters++;
-            console.log(`🗳️ REGISTERED VOTER: Age ${age}, DOB: ${birthDate}`);
-          }
-        } else {
-          invalidDatesCount++;
-          if (index < 10) {
-            console.log(`No valid birth date for resident ${index + 1} (${doc.id})`);
           }
         }
 
@@ -203,9 +237,9 @@ const HomePage: React.FC = () => {
       });
 
       console.log('=== SUMMARY ===');
-      console.log('Date fields found in database:', Array.from(dateFields));
-      console.log('Residents with valid dates:', validDatesCount);
-      console.log('Residents with invalid/missing dates:', invalidDatesCount);
+      console.log('ID fields found in database:', Array.from(idFields));
+      console.log('Residents with voter/national ID:', votersWithIdCount);
+      console.log('Residents without voter/national ID:', votersWithoutIdCount);
       console.log('Final counts:', {
         total,
         males,
@@ -220,7 +254,7 @@ const HomePage: React.FC = () => {
       setMaleCount(males);
       setFemaleCount(females);
       setSeniorCitizenCount(seniors);
-      setRegisteredVotersCount(voters); // Set the new voters count
+      setRegisteredVotersCount(voters); // Updated: Now based on ID submission
       setOccupationData(Object.entries(occupationMap).map(([name, value]) => ({ name, value })));
       setPurokData(Object.entries(purokMap).map(([name, value]) => ({ name, value })));
     };
@@ -273,7 +307,7 @@ const HomePage: React.FC = () => {
     { title: 'Male', value: maleCount, icon: '👨', color: '#4facfe' },
     { title: 'Female', value: femaleCount, icon: '👩', color: '#f093fb' },
     { title: 'Senior Citizens', value: seniorCitizenCount, icon: '👴', color: '#f5576c' },
-    { title: 'Registered Voters', value: registeredVotersCount, icon: '🗳️', color: '#764ba2' }, // New voters card
+    { title: 'Registered Voters', value: registeredVotersCount, icon: '🗳️', color: '#764ba2', subtitle: 'With Valid ID' }, // Updated subtitle
     { title: 'Total Households', value: householdCount, icon: '🏠', color: '#43e97b' },
     { title: 'Blotter Reports', value: blotterCount, icon: '📋', color: '#ff6b6b' },
   ];
@@ -326,6 +360,9 @@ const HomePage: React.FC = () => {
                 <div style={styles.cardInfo}>
                   <h3 style={styles.cardValue}>{card.value.toLocaleString()}</h3>
                   <p style={styles.cardTitle}>{card.title}</p>
+                  {card.subtitle && (
+                    <p style={styles.cardSubtitle}>{card.subtitle}</p>
+                  )}
                 </div>
                 <div style={{ ...styles.cardIcon, color: card.color }}>
                   {card.icon}
@@ -526,6 +563,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#64748b',
     margin: '0',
     fontWeight: '500',
+  },
+  cardSubtitle: {
+    fontSize: '12px',
+    color: '#9ca3af',
+    margin: '2px 0 0 0',
+    fontWeight: '400',
+    fontStyle: 'italic',
   },
   cardIcon: {
     fontSize: '32px',

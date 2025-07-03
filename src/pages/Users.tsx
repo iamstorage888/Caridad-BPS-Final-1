@@ -34,7 +34,7 @@ const Users: React.FC = () => {
   }, []);
 
   const handleAddUser = () => {
-    navigate('/register');
+    navigate('/add-user');
   };
 
   if (loading) {

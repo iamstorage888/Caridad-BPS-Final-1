@@ -12,6 +12,11 @@ interface DocumentRequest {
   purpose: string;
   status: string;
   createdAt: Date;
+  dryDockingDetails?: {
+    isNonResident: boolean;
+    boatNumber: string;
+    address?: string;
+  };
 }
 
 const Documents: React.FC = () => {
@@ -20,6 +25,7 @@ const Documents: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'all' | 'nonResident'>('all');
 
   const fetchRequests = async () => {
     try {
@@ -34,6 +40,7 @@ const Documents: React.FC = () => {
           purpose: data.purpose || 'No purpose specified',
           status: data.status || 'pending',
           createdAt: data.createdAt?.toDate?.() || new Date(),
+          dryDockingDetails: data.dryDockingDetails || null,
         };
       });
       setRequests(docs);
@@ -51,7 +58,6 @@ const Documents: React.FC = () => {
 
   const handleView = async (id: string) => {
     try {
-      // Check if document exists before navigating
       const docRef = doc(db, 'documentRequests', id);
       const docSnap = await getDoc(docRef);
       
@@ -59,7 +65,6 @@ const Documents: React.FC = () => {
         navigate(`/documents/view/${id}`);
       } else {
         alert('Document not found. It may have been deleted.');
-        // Refresh the list to remove any stale data
         fetchRequests();
       }
     } catch (error) {
@@ -70,7 +75,6 @@ const Documents: React.FC = () => {
 
   const handleEdit = async (id: string) => {
     try {
-      // Check if document exists before navigating
       const docRef = doc(db, 'documentRequests', id);
       const docSnap = await getDoc(docRef);
       
@@ -78,7 +82,6 @@ const Documents: React.FC = () => {
         navigate(`/documents/edit/${id}`);
       } else {
         alert('Document not found. It may have been deleted.');
-        // Refresh the list to remove any stale data
         fetchRequests();
       }
     } catch (error) {
@@ -90,7 +93,6 @@ const Documents: React.FC = () => {
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this request?')) {
       try {
-        // Check if document exists before deleting
         const docRef = doc(db, 'documentRequests', id);
         const docSnap = await getDoc(docRef);
         
@@ -100,7 +102,6 @@ const Documents: React.FC = () => {
           alert('Document request deleted successfully.');
         } else {
           alert('Document not found. It may have already been deleted.');
-          // Refresh the list to remove any stale data
           fetchRequests();
         }
       } catch (error) {
@@ -130,10 +131,6 @@ const Documents: React.FC = () => {
     }
   };
 
-  const filteredRequests = filterStatus === 'all' 
-    ? requests 
-    : requests.filter(req => req.status.toLowerCase() === filterStatus);
-
   const getDocumentIcon = (type: string) => {
     const iconMap: { [key: string]: string } = {
       'birth certificate': '👶',
@@ -143,10 +140,43 @@ const Documents: React.FC = () => {
       'id': '🆔',
       'clearance': '📋',
       'certificate': '📜',
+      'certificate dry docking': '⚓',
       default: '📄'
     };
     return iconMap[type.toLowerCase()] || iconMap.default;
   };
+
+  // Filter requests based on active tab
+  const getFilteredRequests = () => {
+    let filtered = requests;
+    
+    if (activeTab === 'nonResident') {
+      // Show only non-resident dry dock certificates
+      filtered = requests.filter(req => 
+        req.documentType === 'Certificate Dry Docking' && 
+        req.dryDockingDetails?.isNonResident === true
+      );
+    } else {
+      // Show all requests
+      filtered = requests;
+    }
+
+    // Apply status filter
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(req => req.status.toLowerCase() === filterStatus);
+    }
+
+    return filtered;
+  };
+
+  const filteredRequests = getFilteredRequests();
+
+  // Get counts for tabs
+  const allRequestsCount = requests.length;
+  const nonResidentDryDockCount = requests.filter(req => 
+    req.documentType === 'Certificate Dry Docking' && 
+    req.dryDockingDetails?.isNonResident === true
+  ).length;
 
   if (loading) {
     return (
@@ -179,8 +209,12 @@ const Documents: React.FC = () => {
             </div>
             <div style={styles.stats}>
               <div style={styles.statCard}>
-                <span style={styles.statNumber}>{requests.length}</span>
+                <span style={styles.statNumber}>{allRequestsCount}</span>
                 <span style={styles.statLabel}>Total Requests</span>
+              </div>
+              <div style={styles.statCard}>
+                <span style={styles.statNumber}>{nonResidentDryDockCount}</span>
+                <span style={styles.statLabel}>Non-Resident Dry Dock</span>
               </div>
             </div>
           </div>
@@ -197,6 +231,30 @@ const Documents: React.FC = () => {
               </button>
             </div>
           )}
+
+          {/* Tab Navigation */}
+          <div style={styles.tabContainer}>
+            <button
+              onClick={() => setActiveTab('all')}
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'all' ? styles.activeTab : styles.inactiveTab)
+              }}
+            >
+              <span style={styles.tabIcon}>📋</span>
+              All Requests ({allRequestsCount})
+            </button>
+            <button
+              onClick={() => setActiveTab('nonResident')}
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'nonResident' ? styles.activeTab : styles.inactiveTab)
+              }}
+            >
+              <span style={styles.tabIcon}>⚓</span>
+              Non-Resident Dry Dock ({nonResidentDryDockCount})
+            </button>
+          </div>
 
           <div style={styles.controls}>
             <button
@@ -229,14 +287,20 @@ const Documents: React.FC = () => {
             <div style={styles.emptyState}>
               <div style={styles.emptyIcon}>📋</div>
               <h3 style={styles.emptyTitle}>
-                {filterStatus === 'all' ? 'No document requests found' : `No ${filterStatus} requests found`}
+                {activeTab === 'nonResident' 
+                  ? 'No non-resident dry dock requests found'
+                  : filterStatus === 'all' 
+                    ? 'No document requests found' 
+                    : `No ${filterStatus} requests found`}
               </h3>
               <p style={styles.emptyText}>
-                {filterStatus === 'all' 
-                  ? 'Get started by creating your first document request.' 
-                  : 'Try selecting a different status filter.'}
+                {activeTab === 'nonResident'
+                  ? 'No non-resident dry dock certificate requests have been submitted yet.'
+                  : filterStatus === 'all' 
+                    ? 'Get started by creating your first document request.' 
+                    : 'Try selecting a different status filter.'}
               </p>
-              {filterStatus === 'all' && (
+              {filterStatus === 'all' && activeTab === 'all' && (
                 <button
                   onClick={() => navigate('/documents/request')}
                   style={styles.emptyButton}
@@ -252,8 +316,16 @@ const Documents: React.FC = () => {
               <table style={styles.table}>
                 <thead>
                   <tr style={styles.headerRow}>
-                    <th style={styles.headerCell}>Requester</th>
+                    <th style={styles.headerCell}>
+                      {activeTab === 'nonResident' ? 'Applicant' : 'Requester'}
+                    </th>
                     <th style={styles.headerCell}>Document</th>
+                    {activeTab === 'nonResident' && (
+                      <>
+                        <th style={styles.headerCell}>Boat Number</th>
+                        <th style={styles.headerCell}>Address</th>
+                      </>
+                    )}
                     <th style={styles.headerCell}>Purpose</th>
                     <th style={styles.headerCell}>Status</th>
                     <th style={styles.headerCell}>Date</th>
@@ -283,6 +355,20 @@ const Documents: React.FC = () => {
                           <span style={styles.docType}>{req.documentType}</span>
                         </div>
                       </td>
+                      {activeTab === 'nonResident' && (
+                        <>
+                          <td style={styles.cell}>
+                            <span style={styles.boatNumber}>
+                              🚢 {req.dryDockingDetails?.boatNumber || 'N/A'}
+                            </span>
+                          </td>
+                          <td style={styles.cell}>
+                            <span style={styles.address}>
+                              📍 {req.dryDockingDetails?.address || 'N/A'}
+                            </span>
+                          </td>
+                        </>
+                      )}
                       <td style={styles.cell}>
                         <span style={styles.purpose}>{req.purpose}</span>
                       </td>
@@ -344,7 +430,6 @@ const Documents: React.FC = () => {
     </div>
   );
 };
-
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     marginLeft: '220px',

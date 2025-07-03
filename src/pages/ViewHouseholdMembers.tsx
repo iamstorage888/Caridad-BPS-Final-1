@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
@@ -15,6 +14,7 @@ interface Resident {
   birthday: string;
   occupation: string;
   isFamilyHead: boolean;
+  isWife?: boolean;
   age?: number;
   householdNumber: string;
 }
@@ -99,6 +99,8 @@ const ViewHouseholdMembers: React.FC = () => {
         const sortedData = data.sort((a, b) => {
           if (a.isFamilyHead && !b.isFamilyHead) return -1;
           if (!a.isFamilyHead && b.isFamilyHead) return 1;
+          if (a.isWife && !b.isWife) return -1;
+          if (!a.isWife && b.isWife) return 1;
           return (b.age || 0) - (a.age || 0);
         });
 
@@ -115,6 +117,7 @@ const ViewHouseholdMembers: React.FC = () => {
   }, [householdNumber]);
 
   const familyHead = residents.find(r => r.isFamilyHead);
+  const wife = residents.find(r => r.isWife);
 
   if (loading) {
     return (
@@ -218,31 +221,60 @@ const ViewHouseholdMembers: React.FC = () => {
           <LogoutButton />
         </div>
 
-        {/* Family Head Card */}
-        {familyHead && (
-          <div style={styles.familyHeadCard}>
-            <div style={styles.cardHeader}>
-              <span style={styles.headerIcon}>👑</span>
-              <h2 style={styles.cardTitle}>Family Head</h2>
-            </div>
-            <div style={styles.familyHeadInfo}>
-              <div style={styles.familyHeadName}>
-                {`${familyHead.firstName} ${familyHead.middleName} ${familyHead.lastName}`}
+        {/* Family Head and Wife Cards */}
+        <div style={styles.leadersContainer}>
+          {/* Family Head Card */}
+          {familyHead && (
+            <div style={styles.familyHeadCard}>
+              <div style={styles.cardHeader}>
+                <span style={styles.headerIcon}>👑</span>
+                <h2 style={styles.cardTitle}>Family Head</h2>
               </div>
-              <div style={styles.familyHeadDetails}>
-                <span style={styles.badge}>
-                  {familyHead.sex === 'Male' ? '♂️' : '♀️'} {familyHead.sex}
-                </span>
-                <span style={styles.badge}>
-                  🎂 Age {familyHead.age || 'Unknown'}
-                </span>
-                <span style={styles.badge}>
-                  💼 {familyHead.occupation}
-                </span>
+              <div style={styles.familyHeadInfo}>
+                <div style={styles.familyHeadName}>
+                  {`${familyHead.firstName} ${familyHead.middleName} ${familyHead.lastName}`}
+                </div>
+                <div style={styles.familyHeadDetails}>
+                  <span style={styles.badge}>
+                    {familyHead.sex === 'Male' ? '♂️' : '♀️'} {familyHead.sex}
+                  </span>
+                  <span style={styles.badge}>
+                    🎂 Age {familyHead.age || 'Unknown'}
+                  </span>
+                  <span style={styles.badge}>
+                    💼 {familyHead.occupation}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* Wife Card */}
+          {wife && (
+            <div style={styles.wifeCard}>
+              <div style={styles.cardHeader}>
+                <span style={styles.headerIcon}>💍</span>
+                <h2 style={styles.cardTitle}>Wife</h2>
+              </div>
+              <div style={styles.familyHeadInfo}>
+                <div style={styles.familyHeadName}>
+                  {`${wife.firstName} ${wife.middleName} ${wife.lastName}`}
+                </div>
+                <div style={styles.familyHeadDetails}>
+                  <span style={styles.badge}>
+                    {wife.sex === 'Male' ? '♂️' : '♀️'} {wife.sex}
+                  </span>
+                  <span style={styles.badge}>
+                    🎂 Age {wife.age || 'Unknown'}
+                  </span>
+                  <span style={styles.badge}>
+                    💼 {wife.occupation}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Summary Stats */}
         <div style={styles.statsContainer}>
@@ -379,8 +411,10 @@ const ViewHouseholdMembers: React.FC = () => {
                     <td style={styles.td}>
                       {resident.isFamilyHead ? (
                         <span style={styles.familyHeadBadge}>👑 Family Head</span>
+                      ) : resident.isWife ? (
+                        <span style={styles.wifeBadge}>💍 Wife</span> 
                       ) : (
-                        <span style={styles.memberBadge}>👤 Member</span>
+                        <span style={styles.memberBadge}>👤 Child</span>
                       )}
                     </td>
                     <td style={styles.td}>
@@ -411,6 +445,7 @@ const ViewHouseholdMembers: React.FC = () => {
     </div>
   );
 };
+
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {

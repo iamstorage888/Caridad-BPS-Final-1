@@ -161,7 +161,7 @@ const AddBlotter: React.FC = () => {
       
       setSuccess(true);
       setTimeout(() => {
-        navigate('/blotter-reports');
+        navigate('/blotter');
       }, 2000);
       
     } catch (error: any) {
@@ -204,7 +204,7 @@ const AddBlotter: React.FC = () => {
         <div style={styles.header}>
           <div style={styles.headerLeft}>
             <button 
-              onClick={() => navigate('/blotter-reports')} 
+              onClick={() => navigate('/blotter')} 
               style={styles.backButton}
             >
               ← Back to Reports
