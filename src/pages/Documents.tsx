@@ -180,7 +180,7 @@ const Documents: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex' }}>
+      <div style={{ display: 'flex', width: '100%' }}>
         <Sidebar />
         <div style={styles.container}>
           <LogoutButton />
@@ -194,7 +194,7 @@ const Documents: React.FC = () => {
   }
 
   return (
-    <div style={{ display: 'flex' }}>
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
       <div style={styles.container}>
         <div style={styles.header}>
@@ -312,117 +312,119 @@ const Documents: React.FC = () => {
               )}
             </div>
           ) : (
-            <div style={styles.tableContainer}>
-              <table style={styles.table}>
-                <thead>
-                  <tr style={styles.headerRow}>
-                    <th style={styles.headerCell}>
-                      {activeTab === 'nonResident' ? 'Applicant' : 'Requester'}
-                    </th>
-                    <th style={styles.headerCell}>Document</th>
-                    {activeTab === 'nonResident' && (
-                      <>
-                        <th style={styles.headerCell}>Boat Number</th>
-                        <th style={styles.headerCell}>Address</th>
-                      </>
-                    )}
-                    <th style={styles.headerCell}>Purpose</th>
-                    <th style={styles.headerCell}>Status</th>
-                    <th style={styles.headerCell}>Date</th>
-                    <th style={styles.headerCell}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRequests.map((req, index) => (
-                    <tr 
-                      key={req.id}
-                      style={{
-                        ...styles.row,
-                        backgroundColor: index % 2 === 0 ? '#fafafa' : '#ffffff'
-                      }}
-                    >
-                      <td style={styles.cell}>
-                        <div style={styles.requesterInfo}>
-                          <div style={styles.avatar}>
-                            {req.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-                          </div>
-                          <span style={styles.fullName}>{req.fullName}</span>
-                        </div>
-                      </td>
-                      <td style={styles.cell}>
-                        <div style={styles.documentInfo}>
-                          <span style={styles.docIcon}>{getDocumentIcon(req.documentType)}</span>
-                          <span style={styles.docType}>{req.documentType}</span>
-                        </div>
-                      </td>
+            <div style={styles.tableWrapper}>
+              <div style={styles.tableContainer}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr style={styles.headerRow}>
+                      <th style={styles.headerCell}>
+                        {activeTab === 'nonResident' ? 'Applicant' : 'Requester'}
+                      </th>
+                      <th style={styles.headerCell}>Document</th>
                       {activeTab === 'nonResident' && (
                         <>
-                          <td style={styles.cell}>
-                            <span style={styles.boatNumber}>
-                              🚢 {req.dryDockingDetails?.boatNumber || 'N/A'}
-                            </span>
-                          </td>
-                          <td style={styles.cell}>
-                            <span style={styles.address}>
-                              📍 {req.dryDockingDetails?.address || 'N/A'}
-                            </span>
-                          </td>
+                          <th style={styles.headerCell}>Boat Number</th>
+                          <th style={styles.headerCell}>Address</th>
                         </>
                       )}
-                      <td style={styles.cell}>
-                        <span style={styles.purpose}>{req.purpose}</span>
-                      </td>
-                      <td style={styles.cell}>
-                        <div style={styles.statusContainer}>
-                          <span style={styles.statusIcon}>{getStatusIcon(req.status)}</span>
-                          <span 
-                            style={{
-                              ...styles.statusBadge,
-                              backgroundColor: getStatusColor(req.status)
-                            }}
-                          >
-                            {req.status}
-                          </span>
-                        </div>
-                      </td>
-                      <td style={styles.cell}>
-                        <span style={styles.date}>{req.createdAt.toLocaleDateString()}</span>
-                      </td>
-                      <td style={styles.cell}>
-                        <div style={styles.actionButtons}>
-                          <button 
-                            style={styles.viewButton} 
-                            onClick={() => handleView(req.id)}
-                            title="View Details"
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#138496'}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#17a2b8'}
-                          >
-                            👁️
-                          </button>
-                          <button 
-                            style={styles.editButton} 
-                            onClick={() => handleEdit(req.id)}
-                            title="Edit Request"
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e0a800'}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#ffc107'}
-                          >
-                            ✏️
-                          </button>
-                          <button 
-                            style={styles.deleteButton} 
-                            onClick={() => handleDelete(req.id)}
-                            title="Delete Request"
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#c82333'}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc3545'}
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      </td>
+                      <th style={styles.headerCell}>Purpose</th>
+                      <th style={styles.headerCell}>Status</th>
+                      <th style={styles.headerCell}>Date</th>
+                      <th style={styles.headerCell}>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredRequests.map((req, index) => (
+                      <tr 
+                        key={req.id}
+                        style={{
+                          ...styles.row,
+                          backgroundColor: index % 2 === 0 ? '#fafafa' : '#ffffff'
+                        }}
+                      >
+                        <td style={styles.cell}>
+                          <div style={styles.requesterInfo}>
+                            <div style={styles.avatar}>
+                              {req.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                            </div>
+                            <span style={styles.fullName}>{req.fullName}</span>
+                          </div>
+                        </td>
+                        <td style={styles.cell}>
+                          <div style={styles.documentInfo}>
+                            <span style={styles.docIcon}>{getDocumentIcon(req.documentType)}</span>
+                            <span style={styles.docType}>{req.documentType}</span>
+                          </div>
+                        </td>
+                        {activeTab === 'nonResident' && (
+                          <>
+                            <td style={styles.cell}>
+                              <span style={styles.boatNumber}>
+                                🚢 {req.dryDockingDetails?.boatNumber || 'N/A'}
+                              </span>
+                            </td>
+                            <td style={styles.cell}>
+                              <span style={styles.address}>
+                                📍 {req.dryDockingDetails?.address || 'N/A'}
+                              </span>
+                            </td>
+                          </>
+                        )}
+                        <td style={styles.cell}>
+                          <span style={styles.purpose}>{req.purpose}</span>
+                        </td>
+                        <td style={styles.cell}>
+                          <div style={styles.statusContainer}>
+                            <span style={styles.statusIcon}>{getStatusIcon(req.status)}</span>
+                            <span 
+                              style={{
+                                ...styles.statusBadge,
+                                backgroundColor: getStatusColor(req.status)
+                              }}
+                            >
+                              {req.status}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={styles.cell}>
+                          <span style={styles.date}>{req.createdAt.toLocaleDateString()}</span>
+                        </td>
+                        <td style={styles.cell}>
+                          <div style={styles.actionButtons}>
+                            <button 
+                              style={styles.viewButton} 
+                              onClick={() => handleView(req.id)}
+                              title="View Details"
+                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#138496'}
+                              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#17a2b8'}
+                            >
+                              👁️
+                            </button>
+                            <button 
+                              style={styles.editButton} 
+                              onClick={() => handleEdit(req.id)}
+                              title="Edit Request"
+                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e0a800'}
+                              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#ffc107'}
+                            >
+                              ✏️
+                            </button>
+                            <button 
+                              style={styles.deleteButton} 
+                              onClick={() => handleDelete(req.id)}
+                              title="Delete Request"
+                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#c82333'}
+                              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc3545'}
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -430,13 +432,14 @@ const Documents: React.FC = () => {
     </div>
   );
 };
+
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    marginLeft: '220px',
+    flex: 1,
     padding: '20px',
-    width: '100%',
     backgroundColor: '#f8f9fa',
-    minHeight: '100vh'
+    minHeight: '100vh',
+    overflowX: 'auto'
   },
   header: {
     display: 'flex',
@@ -448,15 +451,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '12px',
     padding: '32px',
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-    border: '1px solid #e9ecef'
+    border: '1px solid #e9ecef',
+    width: '100%',
+    boxSizing: 'border-box'
   },
   titleSection: {
     display: 'flex',
+    flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginBottom: '32px',
     paddingBottom: '20px',
-    borderBottom: '2px solid #f1f3f4'
+    borderBottom: '2px solid #f1f3f4',
+    flexWrap: 'wrap',
+    gap: '16px'
   },
   title: {
     margin: 0,
@@ -473,7 +481,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   stats: {
     display: 'flex',
-    gap: '16px'
+    gap: '16px',
+    flexWrap: 'wrap'
   },
   statCard: {
     display: 'flex',
@@ -505,7 +514,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#721c24',
     border: '1px solid #f5c6cb',
     borderRadius: '8px',
-    marginBottom: '24px'
+    marginBottom: '24px',
+    flexWrap: 'wrap'
   },
   errorIcon: {
     fontSize: '18px'
@@ -524,7 +534,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '24px',
-    gap: '16px'
+    gap: '16px',
+    flexWrap: 'wrap'
   },
   primaryButton: {
     display: 'flex',
@@ -563,10 +574,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: '#fff',
     cursor: 'pointer'
   },
+  tableWrapper: {
+    width: '100%',
+    overflowX: 'auto'
+  },
   tableContainer: {
     borderRadius: '8px',
     overflow: 'hidden',
-    border: '1px solid #e9ecef'
+    border: '1px solid #e9ecef',
+    minWidth: '1000px'
   },
   table: {
     width: '100%',
@@ -576,20 +592,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: '#f8f9fa'
   },
   headerCell: {
-    padding: '16px 20px',
+    padding: '16px 12px',
     textAlign: 'left' as const,
     fontWeight: '600',
     color: '#495057',
     fontSize: '14px',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
-    borderBottom: '2px solid #dee2e6'
+    borderBottom: '2px solid #dee2e6',
+    whiteSpace: 'nowrap',
+    marginLeft:90,
   },
   row: {
     transition: 'background-color 0.2s ease'
   },
   cell: {
-    padding: '16px 20px',
+    padding: '16px 12px',
     borderBottom: '1px solid #f1f3f4',
     verticalAlign: 'middle'
   },
@@ -608,7 +626,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '12px',
-    fontWeight: '600'
+    fontWeight: '600',
+    flexShrink: 0
   },
   fullName: {
     fontSize: '15px',

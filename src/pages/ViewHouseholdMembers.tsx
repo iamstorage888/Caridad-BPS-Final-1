@@ -33,8 +33,8 @@ const ViewHouseholdMembers: React.FC = () => {
 
   const handleViewResident = (residentId: string) => {
     // Navigate to view resident with the resident ID
-    navigate(`/view-resident/${residentId}`);
-  };
+    navigate(`/resident/${residentId}`);
+  };  
 
   const handleEditResident = (residentId: string) => {
     // Navigate to edit resident with the resident ID
@@ -318,7 +318,7 @@ const ViewHouseholdMembers: React.FC = () => {
               <div style={styles.statNumber}>
                 {residents.filter(r => r.occupation === 'Student').length}
               </div>
-              <div style={styles.statLabel}>Students</div>
+              <div style={styles.statLabel}>Students/Children</div>
             </div>
           </div>
         </div>

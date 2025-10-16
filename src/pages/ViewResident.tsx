@@ -58,9 +58,10 @@ const ResidentView: React.FC = () => {
     }
   };
 
-  const handleBack = () => {
-    navigate('/residents');
-  };
+const handleBack = () => {
+  navigate(-1);
+};
+
 
   const handleEdit = () => {
     navigate(`/edit-resident/${id}`);
@@ -125,7 +126,7 @@ const ResidentView: React.FC = () => {
             <h2 style={styles.errorTitle}>Error</h2>
             <p style={styles.errorText}>{error}</p>
             <button style={styles.backButton} onClick={handleBack}>
-              ← Back to Residents
+              ← Back
             </button>
           </div>
         </div>
@@ -143,7 +144,7 @@ const ResidentView: React.FC = () => {
             <h2 style={styles.errorTitle}>Resident Not Found</h2>
             <p style={styles.errorText}>The resident you're looking for doesn't exist.</p>
             <button style={styles.backButton} onClick={handleBack}>
-              ← Back to Residents
+              ← Back 
             </button>
           </div>
         </div>
@@ -363,6 +364,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     fontWeight: '500',
     transition: 'background-color 0.2s ease',
+    marginRight: '150px',
     boxShadow: '0 2px 4px rgba(245, 158, 11, 0.2)',
   },
   contentContainer: {

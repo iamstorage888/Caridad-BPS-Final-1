@@ -8,6 +8,9 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 
+import { useNavigate } from "react-router-dom";
+
+
 const COLORS = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#ff6b6b', '#feca57'];
 
 const HomePage: React.FC = () => {
@@ -302,14 +305,25 @@ const HomePage: React.FC = () => {
     fetchBlotters();
   }, []);
 
+  
+
   const statCards = [
-    { title: 'Total Residents', value: totalResidents, icon: '👥', color: '#667eea' },
-    { title: 'Male', value: maleCount, icon: '👨', color: '#4facfe' },
-    { title: 'Female', value: femaleCount, icon: '👩', color: '#f093fb' },
-    { title: 'Senior Citizens', value: seniorCitizenCount, icon: '👴', color: '#f5576c' },
-    { title: 'Registered Voters', value: registeredVotersCount, icon: '🗳️', color: '#764ba2', subtitle: 'With Valid ID' }, // Updated subtitle
-    { title: 'Total Households', value: householdCount, icon: '🏠', color: '#43e97b' },
-    { title: 'Blotter Reports', value: blotterCount, icon: '📋', color: '#ff6b6b' },
+    { title: 'Total Residents', value: totalResidents, icon: '👥', color: '#667eea', path: '/residents' },
+    { title: 'Male', value: maleCount, icon: '👨', color: '#4facfe', path: '/residents?filter=male' },
+    { title: 'Female', value: femaleCount, icon: '👩', color: '#f093fb', path: '/residents?filter=female' },
+    { title: 'Senior Citizens', value: seniorCitizenCount, icon: '👴', color: '#f5576c', path: '/residents?filter=senior' },
+    { 
+  title: 'Registered Voters',
+  value: registeredVotersCount,
+  icon: '🗳️',
+  color: '#764ba2',
+  subtitle: 'With Valid ID',
+  path: '/residents?filter=voterRegistrationDate !== null' // instead of just "voters"
+},
+
+    { title: 'Total Households', value: householdCount, icon: '🏠', color: '#43e97b', path: '/households' },
+    { title: 'Blotter Reports', value: blotterCount, icon: '📋', color: '#ff6b6b', path: '/blotter' },
+    { title: 'Documents', value: blotterCount, icon: '📋', color: '#6bffabff', path: '/documents' },
   ];
 
   // Custom tooltip for blotter status pie chart
@@ -341,6 +355,8 @@ const HomePage: React.FC = () => {
     return null;
   };
 
+  const navigate = useNavigate();
+
   return (
     <div style={styles.container}>
       <Sidebar />
@@ -355,7 +371,15 @@ const HomePage: React.FC = () => {
 
         <div style={styles.statsContainer}>
           {statCards.map((card, index) => (
-            <div key={index} style={{ ...styles.card, borderLeft: `4px solid ${card.color}` }}>
+            <div
+              key={index}
+              style={{
+                ...styles.card,
+                borderLeft: `4px solid ${card.color}`,
+                cursor: "pointer"
+              }}
+              onClick={() => navigate(card.path)}
+            >
               <div style={styles.cardContent}>
                 <div style={styles.cardInfo}>
                   <h3 style={styles.cardValue}>{card.value.toLocaleString()}</h3>
@@ -410,7 +434,7 @@ const HomePage: React.FC = () => {
                     tick={{ fontSize: 12 }}
                     stroke="#666"
                   />
-                  <YAxis
+                   <YAxis
                     allowDecimals={false}
                     tick={{ fontSize: 12 }}
                     stroke="#666"
