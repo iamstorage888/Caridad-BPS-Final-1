@@ -4,6 +4,7 @@ import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../Database/firebase';
 import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
+import { migrateResidentsToNumericalIds } from '../Database/migration'; // Import the migration function
 
 interface Resident {
   createdAt: any;
@@ -13,7 +14,7 @@ interface Resident {
   middleName: string;
   address: string;
   status: string;
-  dateAdded?: any; // Firestore timestamp or date string
+  dateAdded?: any;
 }
 
 type SortOption = 'name-asc' | 'name-desc' | 'date-newest' | 'date-oldest';
@@ -106,6 +107,13 @@ const Residents: React.FC = () => {
     setSortBy(e.target.value as SortOption);
   };
 
+  const handleMigrate = () => {
+    migrateResidentsToNumericalIds().then(() => {
+      // Refresh the residents list after migration
+      fetchResidents();
+    });
+  };
+
   const filteredResidents = residents.filter(resident =>
     `${resident.firstName} ${resident.lastName} ${resident.middleName}`
       .toLowerCase()
@@ -129,7 +137,12 @@ const Residents: React.FC = () => {
             <h1 style={styles.title}>Residents</h1>
             <p style={styles.subtitle}>Manage barangay residents information</p>
           </div>
-          <LogoutButton />
+          <div style={styles.headerActions}>
+            <button style={styles.migrateButton} onClick={handleMigrate}>
+              🔄 Assign Numerical IDs
+            </button>
+            <LogoutButton />
+          </div>
         </div>
 
         <div style={styles.toolbar}>
@@ -287,6 +300,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'flex-start',
     marginBottom: '30px',
   },
+  headerActions: {
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'center',
+  },
   title: {
     fontSize: '32px',
     fontWeight: '700',
@@ -297,6 +315,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '16px',
     color: '#64748b',
     margin: '0',
+  },
+  migrateButton: {
+    backgroundColor: '#8b5cf6',
+    color: 'white',
+    border: 'none',
+    padding: '10px 16px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'background-color 0.2s ease',
+    boxShadow: '0 2px 4px rgba(139, 92, 246, 0.2)',
+    marginRight: '190px',
   },
   toolbar: {
     display: 'flex',

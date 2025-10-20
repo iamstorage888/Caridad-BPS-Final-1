@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { act, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
@@ -232,29 +232,29 @@ const Documents: React.FC = () => {
             </div>
           )}
 
-          {/* Tab Navigation */}
-          <div style={styles.tabContainer}>
-            <button
-              onClick={() => setActiveTab('all')}
-              style={{
-                ...styles.tab,
-                ...(activeTab === 'all' ? styles.activeTab : styles.inactiveTab)
-              }}
-            >
-              <span style={styles.tabIcon}>📋</span>
-              All Requests ({allRequestsCount})
-            </button>
-            <button
-              onClick={() => setActiveTab('nonResident')}
-              style={{
-                ...styles.tab,
-                ...(activeTab === 'nonResident' ? styles.activeTab : styles.inactiveTab)
-              }}
-            >
-              <span style={styles.tabIcon}>⚓</span>
-              Non-Resident Dry Dock ({nonResidentDryDockCount})
-            </button>
-          </div>
+{/* Tab Navigation */}
+<div style={styles.tabContainer}>
+  <button
+    onClick={() => setActiveTab('all')}
+    style={{
+      ...styles.tab,
+      ...(activeTab === 'all' ? styles.inactiveTab : styles.activeTab)
+    }}
+  >
+    <span style={styles.tabIcon}>📋</span>
+    All Requests ({allRequestsCount})
+  </button>
+  <button
+    onClick={() => setActiveTab('nonResident')}
+    style={{
+      ...styles.tab,
+      ...(activeTab === 'nonResident' ? styles.activeTab : styles.inactiveTab)
+    }}
+  >
+    <span style={styles.tabIcon}>⚓</span>
+    Non-Resident Dry Dock ({nonResidentDryDockCount})
+  </button>
+</div>
 
           <div style={styles.controls}>
             <button
@@ -369,7 +369,7 @@ const Documents: React.FC = () => {
                               </span>
                             </td>
                           </>
-                        )}
+                        )}  
                         <td style={styles.cell}>
                           <span style={styles.purpose}>{req.purpose}</span>
                         </td>
@@ -484,6 +484,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '16px',
     flexWrap: 'wrap'
   },
+
   statCard: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -493,11 +494,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '8px',
     minWidth: '100px'
   },
+
   statNumber: {
     fontSize: '24px',
     fontWeight: '700',
     color: '#1976d2'
   },
+
   statLabel: {
     fontSize: '12px',
     color: '#1976d2',
@@ -505,6 +508,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     letterSpacing: '0.5px',
     marginTop: '4px'
   },
+
   errorMessage: {
     display: 'flex',
     alignItems: 'center',
@@ -517,9 +521,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: '24px',
     flexWrap: 'wrap'
   },
+
   errorIcon: {
     fontSize: '18px'
   },
+
   retryButton: {
     padding: '4px 12px',
     backgroundColor: '#dc3545',
@@ -529,6 +535,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     fontSize: '12px'
   },
+
   controls: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -537,6 +544,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '16px',
     flexWrap: 'wrap'
   },
+
   primaryButton: {
     display: 'flex',
     alignItems: 'center',
@@ -552,20 +560,24 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
     boxShadow: '0 2px 4px rgba(0, 123, 255, 0.3)'
   },
+
   buttonIcon: {
     fontSize: '18px',
     fontWeight: 'bold'
   },
+
   filterContainer: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px'
   },
+
   filterLabel: {
     fontSize: '14px',
     color: '#495057',
     fontWeight: '500'
   },
+
   select: {
     padding: '8px 12px',
     border: '1px solid #ced4da',
@@ -574,23 +586,28 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: '#fff',
     cursor: 'pointer'
   },
+
   tableWrapper: {
     width: '100%',
     overflowX: 'auto'
   },
+
   tableContainer: {
     borderRadius: '8px',
     overflow: 'hidden',
     border: '1px solid #e9ecef',
     minWidth: '1000px'
   },
+
   table: {
     width: '100%',
     borderCollapse: 'collapse'
   },
+
   headerRow: {
     backgroundColor: '#f8f9fa'
   },
+
   headerCell: {
     padding: '16px 12px',
     textAlign: 'left' as const,
@@ -603,19 +620,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     whiteSpace: 'nowrap',
     marginLeft:90,
   },
+
   row: {
     transition: 'background-color 0.2s ease'
   },
+
   cell: {
     padding: '16px 12px',
     borderBottom: '1px solid #f1f3f4',
     verticalAlign: 'middle'
   },
+
   requesterInfo: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px'
   },
+
   avatar: {
     width: '36px',
     height: '36px',
@@ -629,24 +650,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '600',
     flexShrink: 0
   },
+
   fullName: {
     fontSize: '15px',
     color: '#495057',
     fontWeight: '500'
   },
+
   documentInfo: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px'
   },
+
   docIcon: {
     fontSize: '20px'
   },
+
   docType: {
     fontSize: '14px',
     color: '#495057',
     fontWeight: '500'
   },
+
   purpose: {
     fontSize: '14px',
     color: '#6c757d',
@@ -655,14 +681,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const
   },
+
   statusContainer: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px'
   },
+
   statusIcon: {
     fontSize: '16px'
   },
+
   statusBadge: {
     padding: '4px 12px',
     borderRadius: '12px',
@@ -671,14 +700,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: 'white',
     textTransform: 'capitalize' as const
   },
+
   date: {
     fontSize: '14px',
     color: '#6c757d'
   },
+
   actionButtons: {
     display: 'flex',
     gap: '4px'
   },
+
   viewButton: {
     padding: '8px',
     backgroundColor: '#17a2b8',
@@ -689,6 +721,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     transition: 'background-color 0.2s ease'
   },
+
   editButton: {
     padding: '8px',
     backgroundColor: '#ffc107',
@@ -699,6 +732,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     transition: 'background-color 0.2s ease'
   },
+
   deleteButton: {
     padding: '8px',
     backgroundColor: '#dc3545',
@@ -709,6 +743,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     transition: 'background-color 0.2s ease'
   },
+
   emptyState: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -716,23 +751,27 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '60px 20px',
     textAlign: 'center' as const
   },
+
   emptyIcon: {
     fontSize: '64px',
     marginBottom: '16px',
     opacity: 0.5
   },
+
   emptyTitle: {
     fontSize: '20px',
     color: '#495057',
     margin: '0 0 8px 0',
     fontWeight: '600'
   },
+
   emptyText: {
     fontSize: '16px',
     color: '#6c757d',
     margin: '0 0 24px 0',
     maxWidth: '400px'
   },
+
   emptyButton: {
     padding: '12px 24px',
     backgroundColor: '#007bff',
@@ -743,6 +782,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '16px',
     fontWeight: '500'
   },
+
   loadingContainer: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -751,6 +791,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '300px',
     gap: '16px'
   },
+
   spinner: {
     width: '32px',
     height: '32px',
@@ -759,11 +800,46 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '50%',
     animation: 'spin 1s linear infinite'
   },
+  
   loadingText: {
     color: '#6c757d',
     fontSize: '16px',
     margin: 0
-  }
+  },
+
+  activeTab: {
+  border:'3px solid #15ff00ff',
+  marginLeft:'250px',
+  },
+
+
+  inactiveTab: {
+  border:'3px solid #007bff',
+  marginLeft:'250px',
+  },
+    tabContainer: {
+      display: 'flex',
+      gap: '8px',
+      marginBottom: '20px',
+      borderBottom: '2px solid #e0e0e0',
+    },
+    tab: {
+      padding: '12px 16px',
+      border: 'none',
+      background: 'none',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontWeight: '500',
+      transition: 'all 0.2s ease',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+    },
+
+    tabIcon: {
+      fontSize: '16px',
+    },
+
 };
 
 // Add CSS animation for spinner

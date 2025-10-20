@@ -7,6 +7,7 @@ import LogoutButton from '../components/LogoutButton';
 
 interface Resident {
   id: string;
+  residentNumber?: string;
   lastName: string;
   firstName: string;
   middleName: string;
@@ -280,7 +281,7 @@ const handleBack = () => {
               <div style={styles.detailsList}>
                 <div style={styles.detailItem}>
                   <span style={styles.detailLabel}>Resident ID:</span>
-                  <span style={styles.detailValue}>{resident.id}</span>
+                  <span style={styles.detailValue}>{resident.residentNumber || resident.id}</span>
                 </div>
                 <div style={styles.detailItem}>
                   <span style={styles.detailLabel}>Date Added:</span>

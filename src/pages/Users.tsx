@@ -186,7 +186,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    boxShadow: '0 2px 4px rgba(0, 123, 255, 0.2)'
+    boxShadow: '0 2px 4px rgba(0, 123, 255, 0.2)',
+    marginRight: '150px',
   },
   addButtonIcon: {
     fontSize: '16px',
