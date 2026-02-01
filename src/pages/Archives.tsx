@@ -27,40 +27,108 @@ const Archives: React.FC = () => {
 
   const fetchArchivedBlotters = async () => {
     try {
+      setLoading(true);
+      console.log('🔍 Fetching archived blotters...');
+      
       const snapshot = await getDocs(collection(db, 'archived_blotters'));
-      const list = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data()
-      })) as ArchivedBlotter[];
+      console.log('📊 Total documents fetched:', snapshot.docs.length);
+      
+      const list = snapshot.docs.map(doc => {
+        const data = { 
+          id: doc.id, 
+          ...doc.data()
+        } as ArchivedBlotter;
+        
+        // Debug log each document
+        console.log('📄 Document:', {
+          id: doc.id,
+          incidentType: data.incidentType,
+          status: data.status
+        });
+        
+        return data;
+      });
       
       // Sort by archived date (newest first)
       list.sort((a, b) => new Date(b.archivedDate).getTime() - new Date(a.archivedDate).getTime());
+      
+      console.log('✅ Archived blotters loaded:', list.length);
       setArchivedBlotters(list);
     } catch (error) {
-      console.error('Error fetching archived blotters:', error);
+      console.error('❌ Error fetching archived blotters:', error);
+      alert('Failed to load archived reports. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const permanentlyDeleteBlotter = async (blotterId: string) => {
-    if (!blotterId) return;
+    console.log('🗑️ Delete function called with ID:', blotterId);
+    console.log('🔍 Type of blotterId:', typeof blotterId);
+    console.log('🔍 BlotterId is undefined?', blotterId === undefined);
+    console.log('🔍 BlotterId is null?', blotterId === null);
+    
+    if (!blotterId) {
+      console.error('❌ Invalid blotter ID - ID is:', blotterId);
+      alert('Invalid report ID. Cannot delete.');
+      return;
+    }
     
     const confirmed = window.confirm(
       'Are you sure you want to permanently delete this archived report? This action cannot be undone.'
     );
     
-    if (!confirmed) return;
+    if (!confirmed) {
+      console.log('❌ User cancelled deletion');
+      return;
+    }
     
+    console.log('✅ User confirmed deletion');
     setDeletingId(blotterId);
+    
     try {
-      await deleteDoc(doc(db, 'archived_blotters', blotterId));
-      setArchivedBlotters(prev => prev.filter(blotter => blotter.id !== blotterId));
+      console.log('🔄 Creating document reference for ID:', blotterId);
+      const docRef = doc(db, 'archived_blotters', blotterId);
+      console.log('📍 Document path:', docRef.path);
+      
+      console.log('🔄 Attempting to delete from Firebase...');
+      await deleteDoc(docRef);
+      
+      console.log('✅ Successfully deleted from Firebase!');
+      
+      // Update local state only after successful deletion
+      console.log('🔄 Updating local state...');
+      setArchivedBlotters(prev => {
+        const filtered = prev.filter(blotter => blotter.id !== blotterId);
+        console.log('📊 Before filter:', prev.length, 'After filter:', filtered.length);
+        return filtered;
+      });
+      
+      // Close expanded view if the deleted item was expanded
+      setExpandedIndex(null);
+      
+      console.log('✅ Deletion complete!');
       alert('Report permanently deleted successfully.');
-    } catch (error) {
-      console.error('Error deleting archived blotter:', error);
-      alert('Failed to delete report. Please try again.');
+    } catch (error: any) {
+      console.error('❌ ERROR DELETING:', error);
+      console.error('❌ Error name:', error.name);
+      console.error('❌ Error code:', error.code);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Full error object:', JSON.stringify(error, null, 2));
+      
+      // Provide more detailed error message
+      if (error.code === 'permission-denied') {
+        alert('Permission denied. Please check your Firebase security rules.');
+      } else if (error.code === 'not-found') {
+        alert('Report not found. It may have already been deleted.');
+        // Refresh to sync with database
+        console.log('🔄 Refreshing data...');
+        await fetchArchivedBlotters();
+      } else {
+        alert(`Failed to delete report: ${error.message || 'Unknown error'}. Check console for details.`);
+      }
     } finally {
+      console.log('🏁 Finally block - resetting deletingId');
       setDeletingId(null);
     }
   };
@@ -257,6 +325,7 @@ const Archives: React.FC = () => {
                         <button 
                           onClick={() => toggleExpand(i)} 
                           style={styles.toggleButton}
+                          disabled={isDeleting}
                         >
                           {isExpanded ? '▲' : '▼'}
                         </button>
@@ -275,14 +344,21 @@ const Archives: React.FC = () => {
                         </span>
                       </div>
                       <button 
-                        onClick={() => permanentlyDeleteBlotter(b.id!)}
+                        onClick={() => {
+                          console.log('🖱️ Delete button clicked for:', {
+                            id: b.id,
+                            incidentType: b.incidentType
+                          });
+                          permanentlyDeleteBlotter(b.id!);
+                        }}
                         style={{
                           ...styles.deleteButton,
-                          opacity: isDeleting ? 0.6 : 1
+                          opacity: isDeleting ? 0.6 : 1,
+                          cursor: isDeleting ? 'not-allowed' : 'pointer'
                         }}
                         disabled={isDeleting}
                       >
-                        {isDeleting ? '🔄' : '🗑️'} Delete
+                        {isDeleting ? '🔄 Deleting...' : '🗑️ Delete'}
                       </button>
                     </div>
 

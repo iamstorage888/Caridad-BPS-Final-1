@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../Database/firebase';
 import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
-import { migrateResidentsToNumericalIds } from '../Database/migration'; // Import the migration function
+import { migrateResidentsToNumericalIds } from '../Database/migration';
 
 interface Resident {
   createdAt: any;
@@ -15,17 +15,116 @@ interface Resident {
   address: string;
   status: string;
   dateAdded?: any;
+  sex?: string;
+  dateOfBirth?: string;
+  birthDate?: string;
+  date_of_birth?: string;
+  birth_date?: string;
+  birthday?: string;
+  [key: string]: any; // allow dynamic field access
 }
 
 type SortOption = 'name-asc' | 'name-desc' | 'date-newest' | 'date-oldest';
 
+// --- Reusable helpers (same logic as HomePage) ---
+
+const calculateAge = (dateOfBirth: string): number => {
+  if (!dateOfBirth) return 0;
+
+  const today = new Date();
+  let birthDate: Date;
+
+  if (dateOfBirth.includes('/')) {
+    const parts = dateOfBirth.split('/');
+    if (parts.length === 3) {
+      birthDate = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+    } else {
+      return 0;
+    }
+  } else if (dateOfBirth.includes('-')) {
+    birthDate = new Date(dateOfBirth);
+  } else {
+    birthDate = new Date(dateOfBirth);
+  }
+
+  if (isNaN(birthDate.getTime())) return 0;
+  if (birthDate > today) return 0;
+
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+
+  return age;
+};
+
+const getBirthDate = (data: Resident): string | null => {
+  const possibleDateFields = ['dateOfBirth', 'birthDate', 'date_of_birth', 'birth_date', 'birthday'];
+  for (const field of possibleDateFields) {
+    if (data[field]) return data[field];
+  }
+  return null;
+};
+
+const hasVoterOrNationalID = (data: Resident): boolean => {
+  const voterIdFields = [
+    'voterID', 'voter_id', 'voterId', 'votersId', 'voters_id',
+    'voterIdPicture', 'voter_id_picture', 'voterIdImage', 'voter_id_image'
+  ];
+
+  const nationalIdFields = [
+    'nationalID', 'national_id', 'nationalId', 'nationalIdPicture',
+    'national_id_picture', 'nationalIdImage', 'national_id_image',
+    'philId', 'phil_id', 'philsysId', 'philsys_id'
+  ];
+
+  const genericIdFields = ['idPicture', 'id_picture', 'idImage', 'id_image', 'validId', 'valid_id'];
+
+  const allFields = [...voterIdFields, ...nationalIdFields, ...genericIdFields];
+
+  for (const field of allFields) {
+    if (data[field] && data[field] !== '' && data[field] !== null) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+// --- Filter config driven by the URL param ---
+
+type ActiveFilter = 'male' | 'female' | 'senior' | 'voters' | null;
+
+const FILTER_LABELS: Record<string, { label: string; icon: string; color: string }> = {
+  male:    { label: 'Male Residents',      icon: '👨', color: '#4facfe' },
+  female:  { label: 'Female Residents',    icon: '👩', color: '#f093fb' },
+  senior:  { label: 'Senior Citizens (60+)', icon: '👴', color: '#f5576c' },
+  voters:  { label: 'Registered Voters',   icon: '🗳️', color: '#764ba2' },
+};
+
 const Residents: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   const [residents, setResidents] = useState<Resident[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('name-asc');
 
+  // Derive active filter from URL
+  const rawFilter = searchParams.get('filter');
+  const activeFilter: ActiveFilter = (() => {
+    if (rawFilter === 'male') return 'male';
+    if (rawFilter === 'female') return 'female';
+    if (rawFilter === 'senior') return 'senior';
+    // The HomePage passes a messy string for voters; catch any value that starts with "voter"
+    if (rawFilter && rawFilter.toLowerCase().startsWith('voter')) return 'voters';
+    return null;
+  })();
+
+  // ---- Fetch ----
   const fetchResidents = async () => {
     try {
       setLoading(true);
@@ -42,9 +141,14 @@ const Residents: React.FC = () => {
     }
   };
 
-  const sortResidents = (residents: Resident[], sortOption: SortOption): Resident[] => {
-    const sorted = [...residents];
-    
+  useEffect(() => {
+    fetchResidents();
+  }, []);
+
+  // ---- Sort ----
+  const sortResidents = (list: Resident[], sortOption: SortOption): Resident[] => {
+    const sorted = [...list];
+
     switch (sortOption) {
       case 'name-asc':
         return sorted.sort((a, b) => {
@@ -52,44 +156,76 @@ const Residents: React.FC = () => {
           const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
           return nameA.localeCompare(nameB);
         });
-      
       case 'name-desc':
         return sorted.sort((a, b) => {
           const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
           const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
           return nameB.localeCompare(nameA);
         });
-      
       case 'date-newest':
         return sorted.sort((a, b) => {
           const dateA = a.dateAdded ? (a.dateAdded.toDate ? a.dateAdded.toDate() : new Date(a.dateAdded)) : new Date(0);
           const dateB = b.dateAdded ? (b.dateAdded.toDate ? b.dateAdded.toDate() : new Date(b.dateAdded)) : new Date(0);
           return dateB.getTime() - dateA.getTime();
         });
-      
       case 'date-oldest':
         return sorted.sort((a, b) => {
           const dateA = a.dateAdded ? (a.dateAdded.toDate ? a.dateAdded.toDate() : new Date(a.dateAdded)) : new Date(0);
           const dateB = b.dateAdded ? (b.dateAdded.toDate ? b.dateAdded.toDate() : new Date(b.dateAdded)) : new Date(0);
           return dateA.getTime() - dateB.getTime();
         });
-      
       default:
         return sorted;
     }
   };
 
-  const handleAddResident = () => {
-    navigate('/add-resident');
+  // ---- Filter by active dashboard filter ----
+  const applyDashboardFilter = (list: Resident[]): Resident[] => {
+    if (!activeFilter) return list;
+
+    switch (activeFilter) {
+      case 'male':
+        return list.filter(r => r.sex === 'Male');
+
+      case 'female':
+        return list.filter(r => r.sex === 'Female');
+
+      case 'senior':
+        return list.filter(r => {
+          const dob = getBirthDate(r);
+          if (!dob) return false;
+          return calculateAge(dob) >= 60;
+        });
+
+      case 'voters':
+        return list.filter(r => hasVoterOrNationalID(r));
+
+      default:
+        return list;
+    }
   };
 
-  const handleView = (id: string) => {
-    navigate(`/resident/${id}`);
+  // ---- Search filter (name / address / status) ----
+  const applySearchFilter = (list: Resident[]): Resident[] => {
+    if (!searchTerm) return list;
+    const term = searchTerm.toLowerCase();
+    return list.filter(r =>
+      `${r.firstName} ${r.lastName} ${r.middleName}`.toLowerCase().includes(term) ||
+      (r.address || '').toLowerCase().includes(term) ||
+      (r.status || '').toLowerCase().includes(term)
+    );
   };
 
-  const handleEdit = (id: string) => {
-    navigate(`/edit-resident/${id}`);
-  };
+  // ---- Compose filters then sort ----
+  const displayedResidents = sortResidents(
+    applySearchFilter(applyDashboardFilter(residents)),
+    sortBy
+  );
+
+  // ---- Handlers ----
+  const handleAddResident = () => navigate('/add-resident');
+  const handleView    = (id: string) => navigate(`/resident/${id}`);
+  const handleEdit    = (id: string) => navigate(`/edit-resident/${id}`);
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this resident?')) {
@@ -108,30 +244,17 @@ const Residents: React.FC = () => {
   };
 
   const handleMigrate = () => {
-    migrateResidentsToNumericalIds().then(() => {
-      // Refresh the residents list after migration
-      fetchResidents();
-    });
+    migrateResidentsToNumericalIds().then(() => fetchResidents());
   };
 
-  const filteredResidents = residents.filter(resident =>
-    `${resident.firstName} ${resident.lastName} ${resident.middleName}`
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase()) ||
-    resident.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    resident.status.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const sortedAndFilteredResidents = sortResidents(filteredResidents, sortBy);
-
-  useEffect(() => {
-    fetchResidents();
-  }, []);
+  // ---- Render ----
+  const filterInfo = activeFilter ? FILTER_LABELS[activeFilter] : null;
 
   return (
     <div style={styles.container}>
       <Sidebar />
       <div style={styles.mainContent}>
+        {/* Header */}
         <div style={styles.header}>
           <div>
             <h1 style={styles.title}>Residents</h1>
@@ -145,6 +268,29 @@ const Residents: React.FC = () => {
           </div>
         </div>
 
+        {/* Active filter badge (shown when navigated from dashboard) */}
+        {filterInfo && (
+          <div style={styles.filterBadgeRow}>
+            <div style={{ ...styles.filterBadge, borderColor: filterInfo.color, backgroundColor: filterInfo.color + '15' }}>
+              <span style={{ marginRight: '6px' }}>{filterInfo.icon}</span>
+              <span style={{ ...styles.filterBadgeText, color: filterInfo.color }}>
+                Showing: {filterInfo.label}
+              </span>
+              <button
+                style={styles.filterBadgeClear}
+                onClick={() => navigate('/residents')}
+                title="Clear filter"
+              >
+                ✕
+              </button>
+            </div>
+            <span style={styles.filterCount}>
+              {displayedResidents.length} resident{displayedResidents.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
+
+        {/* Toolbar */}
         <div style={styles.toolbar}>
           <div style={styles.searchContainer}>
             <span style={styles.searchIcon}>🔍</span>
@@ -156,14 +302,10 @@ const Residents: React.FC = () => {
               style={styles.searchInput}
             />
           </div>
-          
+
           <div style={styles.sortContainer}>
             <label style={styles.sortLabel}>Sort by:</label>
-            <select 
-              value={sortBy} 
-              onChange={handleSortChange}
-              style={styles.sortSelect}
-            >
+            <select value={sortBy} onChange={handleSortChange} style={styles.sortSelect}>
               <option value="name-asc">Name (A-Z)</option>
               <option value="name-desc">Name (Z-A)</option>
               <option value="date-newest">Date Added (Newest)</option>
@@ -177,6 +319,7 @@ const Residents: React.FC = () => {
           </button>
         </div>
 
+        {/* Table */}
         <div style={styles.tableContainer}>
           {loading ? (
             <div style={styles.loadingContainer}>
@@ -187,7 +330,8 @@ const Residents: React.FC = () => {
             <>
               <div style={styles.tableHeader}>
                 <span style={styles.resultsCount}>
-                  {sortedAndFilteredResidents.length} of {residents.length} residents
+                  {displayedResidents.length} of {residents.length} residents
+                  {activeFilter && ` • Filtered by: ${filterInfo?.label}`}
                 </span>
               </div>
               <table style={styles.table}>
@@ -201,24 +345,38 @@ const Residents: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedAndFilteredResidents.length === 0 ? (
+                  {displayedResidents.length === 0 ? (
                     <tr>
                       <td colSpan={5} style={styles.emptyState}>
                         <div style={styles.emptyStateContent}>
-                          <span style={styles.emptyStateIcon}>👥</span>
+                          <span style={styles.emptyStateIcon}>
+                            {filterInfo ? filterInfo.icon : '👥'}
+                          </span>
                           <p style={styles.emptyStateText}>
-                            {searchTerm ? 'No residents found matching your search.' : 'No residents found.'}
+                            {activeFilter
+                              ? `No ${filterInfo?.label.toLowerCase()} found.`
+                              : searchTerm
+                                ? 'No residents found matching your search.'
+                                : 'No residents found.'}
                           </p>
-                          {!searchTerm && (
+                          {!activeFilter && !searchTerm && (
                             <button style={styles.addButton} onClick={handleAddResident}>
                               Add First Resident
+                            </button>
+                          )}
+                          {activeFilter && (
+                            <button
+                              style={{ ...styles.addButton, backgroundColor: '#667eea' }}
+                              onClick={() => navigate('/residents')}
+                            >
+                              Show All Residents
                             </button>
                           )}
                         </div>
                       </td>
                     </tr>
                   ) : (
-                    sortedAndFilteredResidents.map((resident, index) => (
+                    displayedResidents.map((resident, index) => (
                       <tr key={resident.id} style={{
                         ...styles.tableRow,
                         backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8fafc'
@@ -258,15 +416,9 @@ const Residents: React.FC = () => {
                         </td>
                         <td style={styles.tableCell}>
                           <div style={styles.actionButtons}>
-                            <button onClick={() => handleView(resident.id)} style={styles.viewButton}>
-                              👁️ View
-                            </button>
-                            <button onClick={() => handleEdit(resident.id)} style={styles.editButton}>
-                              ✏️ Edit
-                            </button>
-                            <button onClick={() => handleDelete(resident.id)} style={styles.deleteButton}>
-                              🗑️ Delete
-                            </button>
+                            <button onClick={() => handleView(resident.id)} style={styles.viewButton}>👁️ View</button>
+                            <button onClick={() => handleEdit(resident.id)} style={styles.editButton}>✏️ Edit</button>
+                            <button onClick={() => handleDelete(resident.id)} style={styles.deleteButton}>🗑️ Delete</button>
                           </div>
                         </td>
                       </tr>
@@ -298,7 +450,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '30px',
+    marginBottom: '24px',
   },
   headerActions: {
     display: 'flex',
@@ -329,6 +481,41 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: '0 2px 4px rgba(139, 92, 246, 0.2)',
     marginRight: '190px',
   },
+
+  // --- Filter badge ---
+  filterBadgeRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '16px',
+  },
+  filterBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 14px',
+    borderRadius: '24px',
+    border: '1px solid',
+  },
+  filterBadgeText: {
+    fontSize: '14px',
+    fontWeight: '600',
+  },
+  filterBadgeClear: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '12px',
+    color: '#64748b',
+    padding: '0 0 0 6px',
+    lineHeight: 1,
+  },
+  filterCount: {
+    fontSize: '13px',
+    color: '#64748b',
+  },
+
+  // --- Toolbar ---
   toolbar: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -399,6 +586,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   buttonIcon: {
     fontSize: '14px',
   },
+
+  // --- Table ---
   tableContainer: {
     backgroundColor: 'white',
     borderRadius: '12px',
