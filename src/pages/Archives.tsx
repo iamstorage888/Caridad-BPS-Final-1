@@ -28,34 +28,17 @@ const Archives: React.FC = () => {
   const fetchArchivedBlotters = async () => {
     try {
       setLoading(true);
-      console.log('🔍 Fetching archived blotters...');
-      
       const snapshot = await getDocs(collection(db, 'archived_blotters'));
-      console.log('📊 Total documents fetched:', snapshot.docs.length);
-      
-      const list = snapshot.docs.map(doc => {
-        const data = { 
-          id: doc.id, 
-          ...doc.data()
-        } as ArchivedBlotter;
-        
-        // Debug log each document
-        console.log('📄 Document:', {
-          id: doc.id,
-          incidentType: data.incidentType,
-          status: data.status
-        });
-        
-        return data;
-      });
-      
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as ArchivedBlotter[];
+
       // Sort by archived date (newest first)
       list.sort((a, b) => new Date(b.archivedDate).getTime() - new Date(a.archivedDate).getTime());
-      
-      console.log('✅ Archived blotters loaded:', list.length);
       setArchivedBlotters(list);
     } catch (error) {
-      console.error('❌ Error fetching archived blotters:', error);
+      console.error('Error fetching archived blotters:', error);
       alert('Failed to load archived reports. Please check your connection and try again.');
     } finally {
       setLoading(false);
@@ -63,72 +46,36 @@ const Archives: React.FC = () => {
   };
 
   const permanentlyDeleteBlotter = async (blotterId: string) => {
-    console.log('🗑️ Delete function called with ID:', blotterId);
-    console.log('🔍 Type of blotterId:', typeof blotterId);
-    console.log('🔍 BlotterId is undefined?', blotterId === undefined);
-    console.log('🔍 BlotterId is null?', blotterId === null);
-    
     if (!blotterId) {
-      console.error('❌ Invalid blotter ID - ID is:', blotterId);
       alert('Invalid report ID. Cannot delete.');
       return;
     }
-    
+
     const confirmed = window.confirm(
       'Are you sure you want to permanently delete this archived report? This action cannot be undone.'
     );
-    
-    if (!confirmed) {
-      console.log('❌ User cancelled deletion');
-      return;
-    }
-    
-    console.log('✅ User confirmed deletion');
+    if (!confirmed) return;
+
     setDeletingId(blotterId);
-    
     try {
-      console.log('🔄 Creating document reference for ID:', blotterId);
-      const docRef = doc(db, 'archived_blotters', blotterId);
-      console.log('📍 Document path:', docRef.path);
-      
-      console.log('🔄 Attempting to delete from Firebase...');
-      await deleteDoc(docRef);
-      
-      console.log('✅ Successfully deleted from Firebase!');
-      
-      // Update local state only after successful deletion
-      console.log('🔄 Updating local state...');
-      setArchivedBlotters(prev => {
-        const filtered = prev.filter(blotter => blotter.id !== blotterId);
-        console.log('📊 Before filter:', prev.length, 'After filter:', filtered.length);
-        return filtered;
-      });
-      
-      // Close expanded view if the deleted item was expanded
+      await deleteDoc(doc(db, 'archived_blotters', blotterId));
+
+      // Remove from local state only after Firestore confirms deletion
+      setArchivedBlotters(prev => prev.filter(b => b.id !== blotterId));
       setExpandedIndex(null);
-      
-      console.log('✅ Deletion complete!');
+
       alert('Report permanently deleted successfully.');
     } catch (error: any) {
-      console.error('❌ ERROR DELETING:', error);
-      console.error('❌ Error name:', error.name);
-      console.error('❌ Error code:', error.code);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Full error object:', JSON.stringify(error, null, 2));
-      
-      // Provide more detailed error message
+      console.error('Error deleting archived blotter:', error);
       if (error.code === 'permission-denied') {
         alert('Permission denied. Please check your Firebase security rules.');
       } else if (error.code === 'not-found') {
         alert('Report not found. It may have already been deleted.');
-        // Refresh to sync with database
-        console.log('🔄 Refreshing data...');
         await fetchArchivedBlotters();
       } else {
-        alert(`Failed to delete report: ${error.message || 'Unknown error'}. Check console for details.`);
+        alert('Failed to delete report. Please try again.');
       }
     } finally {
-      console.log('🏁 Finally block - resetting deletingId');
       setDeletingId(null);
     }
   };
@@ -161,7 +108,7 @@ const Archives: React.FC = () => {
   const getSeverityLevel = (incidentType: string): 'high' | 'medium' | 'low' => {
     const highSeverity = ['assault', 'theft', 'fraud', 'property damage'];
     const mediumSeverity = ['vandalism', 'harassment', 'trespassing'];
-    
+
     if (highSeverity.some(type => incidentType.toLowerCase().includes(type))) return 'high';
     if (mediumSeverity.some(type => incidentType.toLowerCase().includes(type))) return 'medium';
     return 'low';
@@ -175,8 +122,8 @@ const Archives: React.FC = () => {
     }
   };
 
-  const filteredBlotters = filterType === 'all' 
-    ? archivedBlotters 
+  const filteredBlotters = filterType === 'all'
+    ? archivedBlotters
     : archivedBlotters.filter(b => getSeverityLevel(b.incidentType) === filterType);
 
   const formatDate = (dateString: string) => {
@@ -239,26 +186,23 @@ const Archives: React.FC = () => {
                 <span style={styles.statNumber}>{archivedBlotters.length}</span>
                 <span style={styles.statLabel}>Archived Reports</span>
               </div>
-              <div style={{...styles.statCard, backgroundColor: '#e8f5e8'}}>
-                <span style={{...styles.statNumber, color: '#2e7d32'}}>
+              <div style={{ ...styles.statCard, backgroundColor: '#e8f5e8' }}>
+                <span style={{ ...styles.statNumber, color: '#2e7d32' }}>
                   {archivedBlotters.filter(b => b.status === 'closed').length}
                 </span>
-                <span style={{...styles.statLabel, color: '#2e7d32'}}>Closed Cases</span>
+                <span style={{ ...styles.statLabel, color: '#2e7d32' }}>Closed Cases</span>
               </div>
-              <div style={{...styles.statCard, backgroundColor: '#fff3e0'}}>
-                <span style={{...styles.statNumber, color: '#ef6c00'}}>
+              <div style={{ ...styles.statCard, backgroundColor: '#fff3e0' }}>
+                <span style={{ ...styles.statNumber, color: '#ef6c00' }}>
                   {archivedBlotters.filter(b => b.status === 'settled').length}
                 </span>
-                <span style={{...styles.statLabel, color: '#ef6c00'}}>Settled Cases</span>
+                <span style={{ ...styles.statLabel, color: '#ef6c00' }}>Settled Cases</span>
               </div>
             </div>
           </div>
 
           <div style={styles.controls}>
-            <button
-              onClick={() => navigate('/blotter')}
-              style={styles.backButton}
-            >
+            <button onClick={() => navigate('/blotter')} style={styles.backButton}>
               <span style={styles.buttonIcon}>←</span>
               Back to Active Reports
             </button>
@@ -285,8 +229,8 @@ const Archives: React.FC = () => {
                 {filterType === 'all' ? 'No archived reports found' : `No ${filterType} priority archived reports found`}
               </h3>
               <p style={styles.emptyText}>
-                {filterType === 'all' 
-                  ? 'Closed and completed reports will appear here automatically.' 
+                {filterType === 'all'
+                  ? 'Closed and completed reports will appear here automatically.'
                   : 'Try selecting a different priority filter.'}
               </p>
             </div>
@@ -296,7 +240,7 @@ const Archives: React.FC = () => {
                 const severity = getSeverityLevel(b.incidentType);
                 const isExpanded = expandedIndex === i;
                 const isDeleting = deletingId === b.id;
-                
+
                 return (
                   <div key={b.id || i} style={styles.card}>
                     <div style={styles.cardHeader}>
@@ -312,18 +256,13 @@ const Archives: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div style={styles.cardActions}>
-                        <div 
-                          style={{
-                            ...styles.priorityBadge,
-                            backgroundColor: getSeverityColor(severity),
-                          }}
-                        >
+                        <div style={{ ...styles.priorityBadge, backgroundColor: getSeverityColor(severity) }}>
                           {severity.toUpperCase()}
                         </div>
-                        <button 
-                          onClick={() => toggleExpand(i)} 
+                        <button
+                          onClick={() => toggleExpand(i)}
                           style={styles.toggleButton}
                           disabled={isDeleting}
                         >
@@ -343,14 +282,8 @@ const Archives: React.FC = () => {
                           📆 Archived: {formatDateTime(b.archivedDate)}
                         </span>
                       </div>
-                      <button 
-                        onClick={() => {
-                          console.log('🖱️ Delete button clicked for:', {
-                            id: b.id,
-                            incidentType: b.incidentType
-                          });
-                          permanentlyDeleteBlotter(b.id!);
-                        }}
+                      <button
+                        onClick={() => permanentlyDeleteBlotter(b.id!)}
                         style={{
                           ...styles.deleteButton,
                           opacity: isDeleting ? 0.6 : 1,

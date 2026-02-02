@@ -52,30 +52,21 @@ const formatFirestoreDate = (timestamp: any): string => {
   if (!timestamp) return 'N/A';
   
   try {
-    // Check if it's a Firestore Timestamp object
     if (timestamp && typeof timestamp.toDate === 'function') {
       return timestamp.toDate().toLocaleDateString();
     }
-    
-    // Check if it's already a Date object
     if (timestamp instanceof Date) {
       return timestamp.toLocaleDateString();
     }
-    
-    // Check if it's a timestamp number (milliseconds)
     if (typeof timestamp === 'number') {
       return new Date(timestamp).toLocaleDateString();
     }
-    
-    // Check if it's a string that can be parsed as a date
     if (typeof timestamp === 'string') {
       const date = new Date(timestamp);
       if (!isNaN(date.getTime())) {
         return date.toLocaleDateString();
       }
     }
-    
-    // If none of the above, return N/A
     return 'N/A';
   } catch (error) {
     console.error('Error formatting date:', error);
@@ -91,6 +82,7 @@ const ViewDocument: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+  const [showApproveModal, setShowApproveModal] = useState(false);
   const [documentStatus, setDocumentStatus] = useState<string>('Pending');
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -133,7 +125,6 @@ const ViewDocument: React.FC = () => {
             ...matchedResident,
           });
         } else {
-          // fallback if no matched resident: set only requestData
           setData({
             ...requestData,
             firstName: '',
@@ -162,6 +153,7 @@ const ViewDocument: React.FC = () => {
     if (!id) return;
 
     setIsApproving(true);
+    setShowApproveModal(false);
     try {
       const docRef = doc(db, 'documentRequests', id);
       await updateDoc(docRef, {
@@ -221,28 +213,23 @@ const ViewDocument: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'approved':
-        return '#10b981';
-      case 'rejected':
-        return '#ef4444';
+      case 'approved':  return '#10b981';
+      case 'rejected':  return '#ef4444';
       case 'pending':
-      default:
-        return '#f59e0b';
+      default:          return '#f59e0b';
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'approved':
-        return '✅';
-      case 'rejected':
-        return '❌';
+      case 'approved':  return '✅';
+      case 'rejected':  return '❌';
       case 'pending':
-      default:
-        return '⏳';
+      default:          return '⏳';
     }
   };
 
+  // ─── Loading ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div style={styles.container}>
@@ -260,6 +247,7 @@ const ViewDocument: React.FC = () => {
     );
   }
 
+  // ─── Error ─────────────────────────────────────────────────────────────────
   if (error || !data) {
     return (
       <div style={styles.container}>
@@ -272,10 +260,7 @@ const ViewDocument: React.FC = () => {
             <div style={styles.errorIcon}>❌</div>
             <h2 style={styles.errorTitle}>Document Not Found</h2>
             <p style={styles.errorText}>{error || 'The requested document could not be found.'}</p>
-            <button
-              onClick={() => navigate('/documents')}
-              style={styles.backButton}
-            >
+            <button onClick={() => navigate('/documents')} style={styles.backButton}>
               ← Back to Documents
             </button>
           </div>
@@ -284,6 +269,7 @@ const ViewDocument: React.FC = () => {
     );
   }
 
+  // ─── Main ──────────────────────────────────────────────────────────────────
   return (
     <div style={styles.container}>
       <Sidebar />
@@ -296,10 +282,7 @@ const ViewDocument: React.FC = () => {
           {/* Page Header */}
           <div style={styles.pageHeader}>
             <div style={styles.titleSection}>
-              <button
-                onClick={() => navigate('/documents')}
-                style={styles.backBtn}
-              >
+              <button onClick={() => navigate('/documents')} style={styles.backBtn}>
                 ← Back
               </button>
               <div style={styles.pageTitle}>
@@ -313,18 +296,13 @@ const ViewDocument: React.FC = () => {
             
             <div style={styles.statusBadge}>
               <span style={styles.statusIcon}>{getStatusIcon(documentStatus)}</span>
-              <span 
-                style={{
-                  ...styles.statusText,
-                  color: getStatusColor(documentStatus)
-                }}
-              >
+              <span style={{ ...styles.statusText, color: getStatusColor(documentStatus) }}>
                 {documentStatus}
               </span>
             </div>
           </div>
 
-          {/* Document Info Card */}
+          {/* Info Card */}
           <div style={styles.infoCard}>
             <div style={styles.infoGrid}>
               <div style={styles.infoItem}>
@@ -341,9 +319,7 @@ const ViewDocument: React.FC = () => {
               </div>
               <div style={styles.infoItem}>
                 <span style={styles.infoLabel}>📅 Requested:</span>
-                <span style={styles.infoValue}>
-                  {formatFirestoreDate(data.createdAt)}
-                </span>
+                <span style={styles.infoValue}>{formatFirestoreDate(data.createdAt)}</span>
               </div>
             </div>
           </div>
@@ -369,7 +345,7 @@ const ViewDocument: React.FC = () => {
                       'Certificate of Attestation',
                     ].includes(data.documentType)
                       ? (data.documentType as DocumentTemplateProps['documentType'])
-                      : 'Brgy Clearance' // fallback
+                      : 'Brgy Clearance'
                   }
                   purpose={data.purpose}
                   sex={data.sex}
@@ -388,21 +364,12 @@ const ViewDocument: React.FC = () => {
             <div style={styles.actionButtons}>
               {documentStatus === 'Pending' && (
                 <button
-                  onClick={approveDocument}
+                  onClick={() => setShowApproveModal(true)}
                   disabled={isApproving}
                   style={styles.approveButton}
                 >
-                  {isApproving ? (
-                    <>
-                      <span style={styles.spinner}>⏳</span>
-                      Approving...
-                    </>
-                  ) : (
-                    <>
-                      <span style={styles.buttonIcon}>✅</span>
-                      Approve Document
-                    </>
-                  )}
+                  <span style={styles.buttonIcon}>✅</span>
+                  Approve Document
                 </button>
               )}
               
@@ -427,6 +394,42 @@ const ViewDocument: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ─── Approve Confirmation Modal ──────────────────────────────────────── */}
+      {showApproveModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modal}>
+            {/* Icon */}
+            <div style={styles.modalIconWrap}>
+              <span style={styles.modalIcon}>✅</span>
+            </div>
+
+            {/* Text */}
+            <h2 style={styles.modalTitle}>Approve Document?</h2>
+            <p style={styles.modalDescription}>
+              You are about to approve the <strong>{data.documentType}</strong> request for{' '}
+              <strong>{data.fullName}</strong>. This action cannot be undone.
+            </p>
+
+            {/* Buttons */}
+            <div style={styles.modalActions}>
+              <button
+                onClick={() => setShowApproveModal(false)}
+                style={styles.modalCancelBtn}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={approveDocument}
+                disabled={isApproving}
+                style={styles.modalConfirmBtn}
+              >
+                {isApproving ? 'Approving...' : 'Yes, Approve'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -675,6 +678,84 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.2s ease',
   },
+
+  // ─── Modal ───────────────────────────────────────────────────────────────────
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    backdropFilter: 'blur(4px)',
+  },
+  modal: {
+    backgroundColor: 'white',
+    borderRadius: '16px',
+    padding: '40px 36px 32px',
+    width: '100%',
+    maxWidth: '440px',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.18)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    textAlign: 'center',
+  },
+  modalIconWrap: {
+    width: '64px',
+    height: '64px',
+    borderRadius: '50%',
+    backgroundColor: '#dcfce7',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: '20px',
+  },
+  modalIcon: {
+    fontSize: '28px',
+  },
+  modalTitle: {
+    margin: '0 0 10px 0',
+    fontSize: '22px',
+    fontWeight: '700',
+    color: '#1a202c',
+  },
+  modalDescription: {
+    margin: '0 0 28px 0',
+    fontSize: '14px',
+    color: '#64748b',
+    lineHeight: 1.6,
+    maxWidth: '340px',
+  },
+  modalActions: {
+    display: 'flex',
+    gap: '12px',
+    width: '100%',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    padding: '11px 0',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#374151',
+    backgroundColor: '#f1f5f9',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    cursor: 'pointer',
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    padding: '11px 0',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: 'white',
+    backgroundColor: '#10b981',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+  },
 };
 
-export default ViewDocument;  
+export default ViewDocument;

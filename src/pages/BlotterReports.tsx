@@ -13,7 +13,7 @@ interface Blotter {
   incidentDate: string;
   location: string;
   details: string;
-  status?: string; // Add status field
+  status?: string;
 }
 
 const BlotterReports: React.FC = () => {
@@ -24,28 +24,27 @@ const BlotterReports: React.FC = () => {
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Status options based on your requirements
   const statusOptions = [
-  { value: 'filed', label: 'Filed / Logged / Recorded', color: '#8B4513' },
-  { value: 'investigating', label: 'Under Investigation', color: '#FF6347' },
-  { value: 'referred', label: 'Referred / Endorsed', color: '#4169E1' },
-  { value: 'mediation', label: 'For Mediation', color: '#32CD32' },
-  { value: 'settled', label: 'Settled / Resolved', color: '#FF1493' },
-  { value: 'ongoing', label: 'Unresolved / Ongoing', color: '#00CED1' },
-  { value: 'dismissed', label: 'Dismissed / Dropped', color: '#FFD700' },
-  { value: 'escalated', label: 'Escalated / Elevated', color: '#9932CC' },
-  { value: 'closed', label: 'Closed / Completed', color: '#FF4500' },
-  { value: 'Unscheduled', label: 'Unscheduled/Cases', color: '#2E8B57' },
-  { value: 'Scheduled', label: 'Scheduled/Cases', color: '#DC143C' }
+    { value: 'filed', label: 'Filed / Logged / Recorded', color: '#8B4513' },
+    { value: 'investigating', label: 'Under Investigation', color: '#FF6347' },
+    { value: 'referred', label: 'Referred / Endorsed', color: '#4169E1' },
+    { value: 'mediation', label: 'For Mediation', color: '#32CD32' },
+    { value: 'settled', label: 'Settled / Resolved', color: '#FF1493' },
+    { value: 'ongoing', label: 'Unresolved / Ongoing', color: '#00CED1' },
+    { value: 'dismissed', label: 'Dismissed / Dropped', color: '#FFD700' },
+    { value: 'escalated', label: 'Escalated / Elevated', color: '#9932CC' },
+    { value: 'closed', label: 'Closed / Completed', color: '#FF4500' },
+    { value: 'Unscheduled', label: 'Unscheduled/Cases', color: '#2E8B57' },
+    { value: 'Scheduled', label: 'Scheduled/Cases', color: '#DC143C' }
   ];
 
   const fetchBlotters = async () => {
     try {
       const snapshot = await getDocs(collection(db, 'blotters'));
-      const list = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
         ...doc.data(),
-        status: doc.data().status || 'filed' // Default to 'filed' if no status
+        status: doc.data().status || 'filed'
       })) as Blotter[];
       setBlotters(list);
     } catch (error) {
@@ -55,61 +54,60 @@ const BlotterReports: React.FC = () => {
     }
   };
 
+  // This is now a standalone function that takes a fully-formed blotter object.
+  // It does exactly two things in order: write to archived_blotters, then delete from blotters.
   const archiveBlotter = async (blotter: Blotter) => {
     if (!blotter.id) return;
 
     try {
-      // Add to archived collection
       await addDoc(collection(db, 'archived_blotters'), {
-        ...blotter,
+        complainant: blotter.complainant,
+        respondent: blotter.respondent,
+        incidentType: blotter.incidentType,
+        incidentDate: blotter.incidentDate,
+        location: blotter.location,
+        details: blotter.details,
+        status: blotter.status,
         archivedDate: new Date().toISOString()
       });
 
-      // Remove from active blotters
       await deleteDoc(doc(db, 'blotters', blotter.id));
 
-      // Update local state
+      // Remove from local state after both Firestore operations succeed
       setBlotters(prev => prev.filter(b => b.id !== blotter.id));
-      
-      // Show success message
-      alert(`Report has been archived successfully. You can find it in the Archives section.`);
+
+      alert('Report has been archived successfully. You can find it in the Archives section.');
     } catch (error) {
       console.error('Error archiving blotter:', error);
-      throw error;
+      alert('Failed to archive report. Please try again.');
     }
   };
 
   const updateBlotterStatus = async (blotterId: string, newStatus: string) => {
     if (!blotterId) return;
-    
+
     setUpdatingStatus(blotterId);
     try {
-      // Update status in database
+      // 1. Write the new status to Firestore first
       await updateDoc(doc(db, 'blotters', blotterId), {
         status: newStatus
       });
-      
-      // Update local state
-      setBlotters(prev => prev.map(blotter => 
-        blotter.id === blotterId 
-          ? { ...blotter, status: newStatus }
-          : blotter
+
+      // 2. Build the updated blotter object right here — no stale closure
+      const currentBlotter = blotters.find(b => b.id === blotterId);
+      if (!currentBlotter) return;
+
+      const updatedBlotter: Blotter = { ...currentBlotter, status: newStatus };
+
+      // 3. Update local state
+      setBlotters(prev => prev.map(b =>
+        b.id === blotterId ? updatedBlotter : b
       ));
 
-      // Check if status is 'closed' or 'settled' and archive automatically
+      // 4. If closed or settled, archive immediately with the correct data.
+      //    No setTimeout, no stale state — we already have the correct object above.
       if (newStatus === 'closed' || newStatus === 'settled') {
-        const blotterToArchive = blotters.find(b => b.id === blotterId);
-        if (blotterToArchive) {
-          // Add a small delay to ensure the status update is visible
-          setTimeout(async () => {
-            try {
-              await archiveBlotter({ ...blotterToArchive, status: newStatus });
-            } catch (error) {
-              console.error('Error during auto-archiving:', error);
-              alert('Status updated but failed to archive. Please try archiving manually.');
-            }
-          }, 500);
-        }
+        await archiveBlotter(updatedBlotter);
       }
     } catch (error) {
       console.error('Error updating status:', error);
@@ -147,7 +145,7 @@ const BlotterReports: React.FC = () => {
   const getSeverityLevel = (incidentType: string): 'high' | 'medium' | 'low' => {
     const highSeverity = ['assault', 'theft', 'fraud', 'property damage'];
     const mediumSeverity = ['vandalism', 'harassment', 'trespassing'];
-    
+
     if (highSeverity.some(type => incidentType.toLowerCase().includes(type))) return 'high';
     if (mediumSeverity.some(type => incidentType.toLowerCase().includes(type))) return 'medium';
     return 'low';
@@ -166,8 +164,8 @@ const BlotterReports: React.FC = () => {
     return statusInfo || { value: status, label: status, color: '#6c757d' };
   };
 
-  const filteredBlotters = filterType === 'all' 
-    ? blotters 
+  const filteredBlotters = filterType === 'all'
+    ? blotters
     : blotters.filter(b => getSeverityLevel(b.incidentType) === filterType);
 
   const formatDate = (dateString: string) => {
@@ -216,35 +214,28 @@ const BlotterReports: React.FC = () => {
                 <span style={styles.statNumber}>{blotters.length}</span>
                 <span style={styles.statLabel}>Active Reports</span>
               </div>
-              <div style={{...styles.statCard, backgroundColor: '#ffebee'}}>
-                <span style={{...styles.statNumber, color: '#c62828'}}>
+              <div style={{ ...styles.statCard, backgroundColor: '#ffebee' }}>
+                <span style={{ ...styles.statNumber, color: '#c62828' }}>
                   {blotters.filter(b => getSeverityLevel(b.incidentType) === 'high').length}
                 </span>
-                <span style={{...styles.statLabel, color: '#c62828'}}>High Priority</span>
+                <span style={{ ...styles.statLabel, color: '#c62828' }}>High Priority</span>
               </div>
-              <div style={{...styles.statCard, backgroundColor: '#fff3e0'}}>
-                <span style={{...styles.statNumber, color: '#ef6c00'}}>
+              <div style={{ ...styles.statCard, backgroundColor: '#fff3e0' }}>
+                <span style={{ ...styles.statNumber, color: '#ef6c00' }}>
                   {blotters.filter(b => b.status === 'investigating' || b.status === 'ongoing').length}
                 </span>
-                <span style={{...styles.statLabel, color: '#ef6c00'}}>In Progress</span>
+                <span style={{ ...styles.statLabel, color: '#ef6c00' }}>In Progress</span>
               </div>
             </div>
           </div>
 
           <div style={styles.controls}>
             <div style={styles.leftControls}>
-              <button
-                onClick={() => navigate('/add-blotter')}
-                style={styles.primaryButton}
-              >
+              <button onClick={() => navigate('/add-blotter')} style={styles.primaryButton}>
                 <span style={styles.buttonIcon}>+</span>
                 Add Blotter Report
               </button>
-
-              <button
-                onClick={() => navigate('/archives')}
-                style={styles.archiveButton}
-              >
+              <button onClick={() => navigate('/archives')} style={styles.archiveButton}>
                 <span style={styles.buttonIcon}>📁</span>
                 Archives
               </button>
@@ -272,15 +263,12 @@ const BlotterReports: React.FC = () => {
                 {filterType === 'all' ? 'No active blotter reports found' : `No ${filterType} priority reports found`}
               </h3>
               <p style={styles.emptyText}>
-                {filterType === 'all' 
-                  ? 'Start by adding your first incident report.' 
+                {filterType === 'all'
+                  ? 'Start by adding your first incident report.'
                   : 'Try selecting a different priority filter.'}
               </p>
               {filterType === 'all' && (
-                <button
-                  onClick={() => navigate('/add-blotter')}
-                  style={styles.emptyButton}
-                >
+                <button onClick={() => navigate('/add-blotter')} style={styles.emptyButton}>
                   Add Report
                 </button>
               )}
@@ -292,7 +280,7 @@ const BlotterReports: React.FC = () => {
                 const isExpanded = expandedIndex === i;
                 const statusInfo = getStatusInfo(b.status || 'filed');
                 const isUpdating = updatingStatus === b.id;
-                
+
                 return (
                   <div key={b.id || i} style={styles.card}>
                     <div style={styles.cardHeader}>
@@ -308,26 +296,18 @@ const BlotterReports: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div style={styles.cardActions}>
-                        <div 
-                          style={{
-                            ...styles.priorityBadge,
-                            backgroundColor: getSeverityColor(severity),
-                          }}
-                        >
+                        <div style={{ ...styles.priorityBadge, backgroundColor: getSeverityColor(severity) }}>
                           {severity.toUpperCase()}
                         </div>
-                        <button 
-                          onClick={() => toggleExpand(i)} 
-                          style={styles.toggleButton}
-                        >
+                        <button onClick={() => toggleExpand(i)} style={styles.toggleButton}>
                           {isExpanded ? '▲' : '▼'}
                         </button>
                       </div>
                     </div>
 
-                    {/* Status Section - Always Visible */}
+                    {/* Status Section */}
                     <div style={styles.statusSection}>
                       <div style={styles.statusContainer}>
                         <span style={styles.statusLabel}>📊 Status:</span>
@@ -335,10 +315,7 @@ const BlotterReports: React.FC = () => {
                           <select
                             value={b.status || 'filed'}
                             onChange={(e) => updateBlotterStatus(b.id!, e.target.value)}
-                            style={{
-                              ...styles.statusSelect,
-                              opacity: isUpdating ? 0.6 : 1
-                            }}
+                            style={{ ...styles.statusSelect, opacity: isUpdating ? 0.6 : 1 }}
                             disabled={isUpdating}
                           >
                             {statusOptions.map(option => (
@@ -347,16 +324,9 @@ const BlotterReports: React.FC = () => {
                               </option>
                             ))}
                           </select>
-                          {isUpdating && (
-                            <div style={styles.statusSpinner}></div>
-                          )}
+                          {isUpdating && <div style={styles.statusSpinner}></div>}
                         </div>
-                        <div 
-                          style={{
-                            ...styles.statusBadge,
-                            backgroundColor: statusInfo.color,
-                          }}
-                        >
+                        <div style={{ ...styles.statusBadge, backgroundColor: statusInfo.color }}>
                           {statusInfo.label}
                         </div>
                       </div>
@@ -773,7 +743,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   }
 };
 
-// Add CSS animation for spinner
 const styleSheet = document.createElement('style');
 styleSheet.textContent = `
   @keyframes spin {

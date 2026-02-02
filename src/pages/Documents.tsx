@@ -1,4 +1,4 @@
-import React, { act, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
@@ -60,7 +60,6 @@ const Documents: React.FC = () => {
     try {
       const docRef = doc(db, 'documentRequests', id);
       const docSnap = await getDoc(docRef);
-      
       if (docSnap.exists()) {
         navigate(`/documents/view/${id}`);
       } else {
@@ -77,7 +76,6 @@ const Documents: React.FC = () => {
     try {
       const docRef = doc(db, 'documentRequests', id);
       const docSnap = await getDoc(docRef);
-      
       if (docSnap.exists()) {
         navigate(`/documents/edit/${id}`);
       } else {
@@ -95,11 +93,9 @@ const Documents: React.FC = () => {
       try {
         const docRef = doc(db, 'documentRequests', id);
         const docSnap = await getDoc(docRef);
-        
         if (docSnap.exists()) {
           await deleteDoc(docRef);
           setRequests(prev => prev.filter(req => req.id !== id));
-          alert('Document request deleted successfully.');
         } else {
           alert('Document not found. It may have already been deleted.');
           fetchRequests();
@@ -111,28 +107,29 @@ const Documents: React.FC = () => {
     }
   };
 
+  // --- Status helpers ---
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'pending': return '#ffc107';
-      case 'approved': return '#28a745';
-      case 'rejected': return '#dc3545';
-      case 'in progress': return '#17a2b8';
-      default: return '#6c757d';
+      case 'pending':     return { bg: '#fef3c7', text: '#92400e' };
+      case 'approved':    return { bg: '#dcfce7', text: '#166534' };
+      case 'rejected':    return { bg: '#fee2e2', text: '#991b1b' };
+      case 'in progress': return { bg: '#dbeafe', text: '#1e40af' };
+      default:            return { bg: '#f1f5f9', text: '#475569' };
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'pending': return '⏳';
-      case 'approved': return '✅';
-      case 'rejected': return '❌';
+      case 'pending':     return '⏳';
+      case 'approved':    return '✅';
+      case 'rejected':    return '❌';
       case 'in progress': return '🔄';
-      default: return '📄';
+      default:            return '📄';
     }
   };
 
   const getDocumentIcon = (type: string) => {
-    const iconMap: { [key: string]: string } = {
+    const map: { [key: string]: string } = {
       'birth certificate': '👶',
       'marriage certificate': '💒',
       'death certificate': '⚰️',
@@ -141,291 +138,255 @@ const Documents: React.FC = () => {
       'clearance': '📋',
       'certificate': '📜',
       'certificate dry docking': '⚓',
-      default: '📄'
     };
-    return iconMap[type.toLowerCase()] || iconMap.default;
+    return map[type.toLowerCase()] || '📄';
   };
 
-  // Filter requests based on active tab
+  // --- Filtering ---
   const getFilteredRequests = () => {
     let filtered = requests;
-    
     if (activeTab === 'nonResident') {
-      // Show only non-resident dry dock certificates
-      filtered = requests.filter(req => 
-        req.documentType === 'Certificate Dry Docking' && 
+      filtered = filtered.filter(req =>
+        req.documentType === 'Certificate Dry Docking' &&
         req.dryDockingDetails?.isNonResident === true
       );
-    } else {
-      // Show all requests
-      filtered = requests;
     }
-
-    // Apply status filter
     if (filterStatus !== 'all') {
       filtered = filtered.filter(req => req.status.toLowerCase() === filterStatus);
     }
-
     return filtered;
   };
 
   const filteredRequests = getFilteredRequests();
-
-  // Get counts for tabs
-  const allRequestsCount = requests.length;
-  const nonResidentDryDockCount = requests.filter(req => 
-    req.documentType === 'Certificate Dry Docking' && 
+  const nonResidentCount = requests.filter(req =>
+    req.documentType === 'Certificate Dry Docking' &&
     req.dryDockingDetails?.isNonResident === true
   ).length;
 
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', width: '100%' }}>
-        <Sidebar />
-        <div style={styles.container}>
-          <LogoutButton />
-          <div style={styles.loadingContainer}>
-            <div style={styles.spinner}></div>
-            <p style={styles.loadingText}>Loading document requests...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // --- Render ---
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div style={styles.container}>
       <Sidebar />
-      <div style={styles.container}>
+      <div style={styles.mainContent}>
+
+        {/* Header */}
         <div style={styles.header}>
+          <div>
+            <h1 style={styles.title}>Documents</h1>
+            <p style={styles.subtitle}>Manage and track all document requests</p>
+          </div>
           <LogoutButton />
         </div>
 
-        <div style={styles.content}>
-          <div style={styles.titleSection}>
-            <div>
-              <h1 style={styles.title}>Document Requests</h1>
-              <p style={styles.subtitle}>Manage and track all document requests</p>
-            </div>
-            <div style={styles.stats}>
-              <div style={styles.statCard}>
-                <span style={styles.statNumber}>{allRequestsCount}</span>
-                <span style={styles.statLabel}>Total Requests</span>
+        {/* Stat cards — same grid as HomePage */}
+        <div style={styles.statsContainer}>
+          {[
+            { label: 'Total Requests',        value: requests.length,   icon: '📋', color: '#667eea' },
+            { label: 'Non-Resident Dry Dock', value: nonResidentCount,  icon: '⚓',  color: '#764ba2' },
+            { label: 'Pending',               value: requests.filter(r => r.status.toLowerCase() === 'pending').length,     icon: '⏳', color: '#f5576c' },
+            { label: 'Approved',              value: requests.filter(r => r.status.toLowerCase() === 'approved').length,    icon: '✅', color: '#43e97b' },
+          ].map((card, i) => (
+            <div key={i} style={{ ...styles.statCard, borderLeft: `4px solid ${card.color}` }}>
+              <div style={styles.statCardContent}>
+                <div>
+                  <h3 style={styles.statValue}>{card.value.toLocaleString()}</h3>
+                  <p style={styles.statLabel}>{card.label}</p>
+                </div>
+                <div style={{ ...styles.statIcon, color: card.color }}>{card.icon}</div>
               </div>
-              <div style={styles.statCard}>
-                <span style={styles.statNumber}>{nonResidentDryDockCount}</span>
-                <span style={styles.statLabel}>Non-Resident Dry Dock</span>
-              </div>
             </div>
-          </div>
+          ))}
+        </div>
 
-          {error && (
-            <div style={styles.errorMessage}>
-              <span style={styles.errorIcon}>⚠️</span>
-              <span>{error}</span>
-              <button 
-                onClick={fetchRequests} 
-                style={styles.retryButton}
+        {/* Error banner */}
+        {error && (
+          <div style={styles.errorBanner}>
+            <span>⚠️ {error}</span>
+            <button style={styles.retryBtn} onClick={fetchRequests}>Retry</button>
+          </div>
+        )}
+
+        {/* Tab bar */}
+        <div style={styles.tabBar}>
+          {(['all', 'nonResident'] as const).map(tab => {
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  ...styles.tab,
+                  borderBottom: isActive ? '3px solid #667eea' : '3px solid transparent',
+                  color: isActive ? '#667eea' : '#64748b',
+                  fontWeight: isActive ? 600 : 500,
+                }}
               >
-                Retry
+                <span>{tab === 'all' ? '📋' : '⚓'}</span>
+                {tab === 'all' ? `All Requests (${requests.length})` : `Non-Resident Dry Dock (${nonResidentCount})`}
               </button>
-            </div>
-          )}
+            );
+          })}
+        </div>
 
-{/* Tab Navigation */}
-<div style={styles.tabContainer}>
-  <button
-    onClick={() => setActiveTab('all')}
-    style={{
-      ...styles.tab,
-      ...(activeTab === 'all' ? styles.inactiveTab : styles.activeTab)
-    }}
-  >
-    <span style={styles.tabIcon}>📋</span>
-    All Requests ({allRequestsCount})
-  </button>
-  <button
-    onClick={() => setActiveTab('nonResident')}
-    style={{
-      ...styles.tab,
-      ...(activeTab === 'nonResident' ? styles.activeTab : styles.inactiveTab)
-    }}
-  >
-    <span style={styles.tabIcon}>⚓</span>
-    Non-Resident Dry Dock ({nonResidentDryDockCount})
-  </button>
-</div>
-
-          <div style={styles.controls}>
-            <button
-              onClick={() => navigate('/documents/request')}
-              style={styles.primaryButton}
-              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#0056b3'}
-              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#007bff'}
+        {/* Toolbar: search-style filter + action button */}
+        <div style={styles.toolbar}>
+          <div style={styles.filterGroup}>
+            <label style={styles.filterLabel}>Filter by status:</label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={styles.filterSelect}
             >
-              <span style={styles.buttonIcon}>+</span>
-              Request Document
-            </button>
-
-            <div style={styles.filterContainer}>
-              <label style={styles.filterLabel}>Filter by status:</label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                style={styles.select}
-              >
-                <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="in progress">In Progress</option>
-              </select>
-            </div>
+              <option value="all">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="in progress">In Progress</option>
+            </select>
           </div>
+          <button style={styles.addButton} onClick={() => navigate('/documents/request')}>
+            <span>➕</span> Request Document
+          </button>
+        </div>
 
-          {filteredRequests.length === 0 ? (
-            <div style={styles.emptyState}>
-              <div style={styles.emptyIcon}>📋</div>
-              <h3 style={styles.emptyTitle}>
-                {activeTab === 'nonResident' 
-                  ? 'No non-resident dry dock requests found'
-                  : filterStatus === 'all' 
-                    ? 'No document requests found' 
-                    : `No ${filterStatus} requests found`}
-              </h3>
-              <p style={styles.emptyText}>
-                {activeTab === 'nonResident'
-                  ? 'No non-resident dry dock certificate requests have been submitted yet.'
-                  : filterStatus === 'all' 
-                    ? 'Get started by creating your first document request.' 
-                    : 'Try selecting a different status filter.'}
-              </p>
-              {filterStatus === 'all' && activeTab === 'all' && (
-                <button
-                  onClick={() => navigate('/documents/request')}
-                  style={styles.emptyButton}
-                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#0056b3'}
-                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#007bff'}
-                >
-                  Create Request
-                </button>
-              )}
+        {/* Table */}
+        <div style={styles.tableContainer}>
+          {loading ? (
+            <div style={styles.loadingContainer}>
+              <div style={styles.spinner}></div>
+              <p style={styles.loadingText}>Loading document requests...</p>
             </div>
           ) : (
-            <div style={styles.tableWrapper}>
-              <div style={styles.tableContainer}>
-                <table style={styles.table}>
-                  <thead>
-                    <tr style={styles.headerRow}>
-                      <th style={styles.headerCell}>
-                        {activeTab === 'nonResident' ? 'Applicant' : 'Requester'}
-                      </th>
-                      <th style={styles.headerCell}>Document</th>
-                      {activeTab === 'nonResident' && (
-                        <>
-                          <th style={styles.headerCell}>Boat Number</th>
-                          <th style={styles.headerCell}>Address</th>
-                        </>
-                      )}
-                      <th style={styles.headerCell}>Purpose</th>
-                      <th style={styles.headerCell}>Status</th>
-                      <th style={styles.headerCell}>Date</th>
-                      <th style={styles.headerCell}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRequests.map((req, index) => (
-                      <tr 
-                        key={req.id}
-                        style={{
-                          ...styles.row,
-                          backgroundColor: index % 2 === 0 ? '#fafafa' : '#ffffff'
-                        }}
-                      >
-                        <td style={styles.cell}>
-                          <div style={styles.requesterInfo}>
-                            <div style={styles.avatar}>
-                              {req.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-                            </div>
-                            <span style={styles.fullName}>{req.fullName}</span>
-                          </div>
-                        </td>
-                        <td style={styles.cell}>
-                          <div style={styles.documentInfo}>
-                            <span style={styles.docIcon}>{getDocumentIcon(req.documentType)}</span>
-                            <span style={styles.docType}>{req.documentType}</span>
-                          </div>
-                        </td>
-                        {activeTab === 'nonResident' && (
-                          <>
-                            <td style={styles.cell}>
-                              <span style={styles.boatNumber}>
-                                🚢 {req.dryDockingDetails?.boatNumber || 'N/A'}
-                              </span>
-                            </td>
-                            <td style={styles.cell}>
-                              <span style={styles.address}>
-                                📍 {req.dryDockingDetails?.address || 'N/A'}
-                              </span>
-                            </td>
-                          </>
-                        )}  
-                        <td style={styles.cell}>
-                          <span style={styles.purpose}>{req.purpose}</span>
-                        </td>
-                        <td style={styles.cell}>
-                          <div style={styles.statusContainer}>
-                            <span style={styles.statusIcon}>{getStatusIcon(req.status)}</span>
-                            <span 
-                              style={{
-                                ...styles.statusBadge,
-                                backgroundColor: getStatusColor(req.status)
-                              }}
-                            >
-                              {req.status}
-                            </span>
-                          </div>
-                        </td>
-                        <td style={styles.cell}>
-                          <span style={styles.date}>{req.createdAt.toLocaleDateString()}</span>
-                        </td>
-                        <td style={styles.cell}>
-                          <div style={styles.actionButtons}>
-                            <button 
-                              style={styles.viewButton} 
-                              onClick={() => handleView(req.id)}
-                              title="View Details"
-                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#138496'}
-                              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#17a2b8'}
-                            >
-                              👁️
-                            </button>
-                            <button 
-                              style={styles.editButton} 
-                              onClick={() => handleEdit(req.id)}
-                              title="Edit Request"
-                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e0a800'}
-                              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#ffc107'}
-                            >
-                              ✏️
-                            </button>
-                            <button 
-                              style={styles.deleteButton} 
-                              onClick={() => handleDelete(req.id)}
-                              title="Delete Request"
-                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#c82333'}
-                              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc3545'}
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <>
+              {/* Results count bar */}
+              <div style={styles.tableHeaderBar}>
+                <span style={styles.resultsCount}>
+                  {filteredRequests.length} of {requests.length} requests
+                  {activeTab === 'nonResident' && ' • Filtered: Non-Resident Dry Dock'}
+                  {filterStatus !== 'all' && ` • Status: ${filterStatus}`}
+                </span>
               </div>
-            </div>
+
+              {filteredRequests.length === 0 ? (
+                <div style={styles.emptyState}>
+                  <span style={styles.emptyIcon}>
+                    {activeTab === 'nonResident' ? '⚓' : '📋'}
+                  </span>
+                  <p style={styles.emptyTitle}>
+                    {activeTab === 'nonResident'
+                      ? 'No non-resident dry dock requests found'
+                      : filterStatus !== 'all'
+                        ? `No ${filterStatus} requests found`
+                        : 'No document requests yet'}
+                  </p>
+                  <p style={styles.emptySubtitle}>
+                    {activeTab === 'nonResident'
+                      ? 'Non-resident dry dock certificate requests will appear here.'
+                      : filterStatus !== 'all'
+                        ? 'Try selecting a different status filter.'
+                        : 'Create your first document request to get started.'}
+                  </p>
+                  {filterStatus === 'all' && activeTab === 'all' && (
+                    <button style={styles.addButton} onClick={() => navigate('/documents/request')}>
+                      <span>➕</span> Request Document
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr style={styles.tableHeaderRow}>
+                        <th style={styles.tableHeaderCell}>Requester</th>
+                        <th style={styles.tableHeaderCell}>Document</th>
+                        {activeTab === 'nonResident' && <th style={styles.tableHeaderCell}>Boat No.</th>}
+                        {activeTab === 'nonResident' && <th style={styles.tableHeaderCell}>Address</th>}
+                        <th style={styles.tableHeaderCell}>Purpose</th>
+                        <th style={styles.tableHeaderCell}>Status</th>
+                        <th style={styles.tableHeaderCell}>Date</th>
+                        <th style={styles.tableHeaderCell}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRequests.map((req, index) => {
+                        const statusStyle = getStatusColor(req.status);
+                        return (
+                          <tr
+                            key={req.id}
+                            style={{
+                              ...styles.tableRow,
+                              backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8fafc',
+                            }}
+                          >
+                            {/* Name */}
+                            <td style={styles.tableCell}>
+                              <div style={styles.nameCell}>
+                                <span style={styles.avatar}>
+                                  {req.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                                </span>
+                                <span style={styles.fullName}>{req.fullName}</span>
+                              </div>
+                            </td>
+
+                            {/* Doc type */}
+                            <td style={styles.tableCell}>
+                              <div style={styles.docCell}>
+                                <span style={styles.docIcon}>{getDocumentIcon(req.documentType)}</span>
+                                <span style={styles.docType}>{req.documentType}</span>
+                              </div>
+                            </td>
+
+                            {/* Dry dock extras */}
+                            {activeTab === 'nonResident' && (
+                              <td style={styles.tableCell}>
+                                <span style={styles.metaText}>🚢 {req.dryDockingDetails?.boatNumber || 'N/A'}</span>
+                              </td>
+                            )}
+                            {activeTab === 'nonResident' && (
+                              <td style={styles.tableCell}>
+                                <span style={styles.metaText}>📍 {req.dryDockingDetails?.address || 'N/A'}</span>
+                              </td>
+                            )}
+
+                            {/* Purpose */}
+                            <td style={styles.tableCell}>
+                              <span style={styles.purposeText}>{req.purpose}</span>
+                            </td>
+
+                            {/* Status */}
+                            <td style={styles.tableCell}>
+                              <span style={{
+                                ...styles.statusBadge,
+                                backgroundColor: statusStyle.bg,
+                                color: statusStyle.text,
+                              }}>
+                                {getStatusIcon(req.status)} {req.status}
+                              </span>
+                            </td>
+
+                            {/* Date */}
+                            <td style={styles.tableCell}>
+                              <span style={styles.dateText}>
+                                {req.createdAt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td style={styles.tableCell}>
+                              <div style={styles.actionButtons}>
+                                <button onClick={() => handleView(req.id)} style={styles.viewButton}>👁️ View</button>
+                                <button onClick={() => handleEdit(req.id)} style={styles.editButton}>✏️ Edit</button>
+                                <button onClick={() => handleDelete(req.id)} style={styles.deleteButton}>🗑️ Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -433,423 +394,368 @@ const Documents: React.FC = () => {
   );
 };
 
+// ---------------------------------------------------------------------------
+// Styles — mirrors HomePage / Residents exactly
+// ---------------------------------------------------------------------------
 const styles: { [key: string]: React.CSSProperties } = {
+  // Layout
   container: {
-    flex: 1,
-    padding: '20px',
-    backgroundColor: '#f8f9fa',
+    display: 'flex',
     minHeight: '100vh',
-    overflowX: 'auto'
+    backgroundColor: '#f8fafc',
   },
+  mainContent: {
+    marginLeft: '260px',
+    padding: '30px',
+    width: 'calc(100% - 260px)',
+    minHeight: '100vh',
+  },
+
+  // Header
   header: {
     display: 'flex',
-    justifyContent: 'flex-end',
-    marginBottom: '24px'
-  },
-  content: {
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    padding: '32px',
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-    border: '1px solid #e9ecef',
-    width: '100%',
-    boxSizing: 'border-box'
-  },
-  titleSection: {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: '32px',
-    paddingBottom: '20px',
-    borderBottom: '2px solid #f1f3f4',
-    flexWrap: 'wrap',
-    gap: '16px'
+    alignItems: 'flex-start',
+    marginBottom: '30px',
   },
   title: {
-    margin: 0,
-    fontSize: '28px',
-    fontWeight: '600',
-    color: '#2c3e50',
-    letterSpacing: '-0.5px'
+    fontSize: '32px',
+    fontWeight: '700',
+    color: '#1a202c',
+    margin: '0 0 5px 0',
   },
   subtitle: {
-    margin: '4px 0 0 0',
     fontSize: '16px',
-    color: '#6c757d',
-    fontWeight: '400'
-  },
-  stats: {
-    display: 'flex',
-    gap: '16px',
-    flexWrap: 'wrap'
+    color: '#64748b',
+    margin: '0',
   },
 
+  // Stat cards (identical grid as HomePage)
+  statsContainer: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '20px',
+    marginBottom: '30px',
+  },
   statCard: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    padding: '16px 20px',
-    backgroundColor: '#e3f2fd',
-    borderRadius: '8px',
-    minWidth: '100px'
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    padding: '24px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
   },
-
-  statNumber: {
-    fontSize: '24px',
-    fontWeight: '700',
-    color: '#1976d2'
-  },
-
-  statLabel: {
-    fontSize: '12px',
-    color: '#1976d2',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-    marginTop: '4px'
-  },
-
-  errorMessage: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '12px 16px',
-    backgroundColor: '#f8d7da',
-    color: '#721c24',
-    border: '1px solid #f5c6cb',
-    borderRadius: '8px',
-    marginBottom: '24px',
-    flexWrap: 'wrap'
-  },
-
-  errorIcon: {
-    fontSize: '18px'
-  },
-
-  retryButton: {
-    padding: '4px 12px',
-    backgroundColor: '#dc3545',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '12px'
-  },
-
-  controls: {
+  statCardContent: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '24px',
-    gap: '16px',
-    flexWrap: 'wrap'
+  },
+  statValue: {
+    fontSize: '28px',
+    fontWeight: '700',
+    color: '#1a202c',
+    margin: '0 0 4px 0',
+  },
+  statLabel: {
+    fontSize: '14px',
+    color: '#64748b',
+    margin: '0',
+    fontWeight: '500',
+  },
+  statIcon: {
+    fontSize: '32px',
+    opacity: 0.8,
   },
 
-  primaryButton: {
+  // Error
+  errorBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px 18px',
+    backgroundColor: '#fee2e2',
+    color: '#991b1b',
+    borderRadius: '8px',
+    marginBottom: '20px',
+    fontSize: '14px',
+  },
+  retryBtn: {
+    padding: '6px 14px',
+    backgroundColor: '#ef4444',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '500',
+  },
+
+  // Tabs
+  tabBar: {
+    display: 'flex',
+    gap: '4px',
+    marginBottom: '20px',
+    borderBottom: '1px solid #e2e8f0',
+  },
+  tab: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    padding: '12px 24px',
-    backgroundColor: '#007bff',
-    color: '#fff',
+    padding: '10px 18px',
+    background: 'none',
     border: 'none',
-    borderRadius: '8px',
+    borderBottom: '3px solid transparent',
     cursor: 'pointer',
-    fontSize: '16px',
-    fontWeight: '500',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 4px rgba(0, 123, 255, 0.3)'
+    fontSize: '14px',
+    fontWeight: 500,
+    color: '#64748b',
+    transition: 'color 0.2s, border-color 0.2s',
+    borderRadius: '8px 8px 0 0',
   },
 
-  buttonIcon: {
-    fontSize: '18px',
-    fontWeight: 'bold'
+  // Toolbar
+  toolbar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '24px',
+    gap: '20px',
   },
-
-  filterContainer: {
+  filterGroup: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
+    gap: '8px',
   },
-
   filterLabel: {
     fontSize: '14px',
-    color: '#495057',
-    fontWeight: '500'
-  },
-
-  select: {
-    padding: '8px 12px',
-    border: '1px solid #ced4da',
-    borderRadius: '6px',
-    fontSize: '14px',
-    backgroundColor: '#fff',
-    cursor: 'pointer'
-  },
-
-  tableWrapper: {
-    width: '100%',
-    overflowX: 'auto'
-  },
-
-  tableContainer: {
-    borderRadius: '8px',
-    overflow: 'hidden',
-    border: '1px solid #e9ecef',
-    minWidth: '1000px'
-  },
-
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse'
-  },
-
-  headerRow: {
-    backgroundColor: '#f8f9fa'
-  },
-
-  headerCell: {
-    padding: '16px 12px',
-    textAlign: 'left' as const,
-    fontWeight: '600',
-    color: '#495057',
-    fontSize: '14px',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-    borderBottom: '2px solid #dee2e6',
+    color: '#374151',
+    fontWeight: '500',
     whiteSpace: 'nowrap',
-    marginLeft:90,
   },
-
-  row: {
-    transition: 'background-color 0.2s ease'
+  filterSelect: {
+    padding: '10px 14px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '14px',
+    backgroundColor: 'white',
+    color: '#374151',
+    cursor: 'pointer',
+    outline: 'none',
+    minWidth: '160px',
   },
-
-  cell: {
-    padding: '16px 12px',
-    borderBottom: '1px solid #f1f3f4',
-    verticalAlign: 'middle'
-  },
-
-  requesterInfo: {
+  addButton: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px'
+    gap: '8px',
+    backgroundColor: '#10b981',
+    color: 'white',
+    border: 'none',
+    padding: '12px 20px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    boxShadow: '0 2px 4px rgba(16,185,129,0.2)',
+    whiteSpace: 'nowrap',
   },
 
+  // Table container (same as Residents)
+  tableContainer: {
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    overflow: 'hidden',
+  },
+  tableHeaderBar: {
+    padding: '16px 20px',
+    borderBottom: '1px solid #e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  resultsCount: {
+    fontSize: '14px',
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+  },
+  tableHeaderRow: {
+    backgroundColor: '#f1f5f9',
+  },
+  tableHeaderCell: {
+    padding: '14px 20px',
+    textAlign: 'left' as const,
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#374151',
+    borderBottom: '1px solid #e2e8f0',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.4px',
+    whiteSpace: 'nowrap',
+  },
+  tableRow: {
+    transition: 'background-color 0.1s ease',
+  },
+  tableCell: {
+    padding: '16px 20px',
+    fontSize: '14px',
+    color: '#374151',
+    borderBottom: '1px solid #f1f5f9',
+    verticalAlign: 'middle',
+  },
+
+  // Cell internals
+  nameCell: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
   avatar: {
     width: '36px',
     height: '36px',
     borderRadius: '50%',
-    backgroundColor: '#6c757d',
-    color: 'white',
+    backgroundColor: '#e2e8f0',
+    color: '#475569',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '12px',
+    fontSize: '13px',
     fontWeight: '600',
-    flexShrink: 0
+    flexShrink: 0,
   },
-
   fullName: {
-    fontSize: '15px',
-    color: '#495057',
-    fontWeight: '500'
+    fontWeight: '500',
+    color: '#1a202c',
+    fontSize: '14px',
   },
-
-  documentInfo: {
+  docCell: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
+    gap: '8px',
   },
-
   docIcon: {
-    fontSize: '20px'
+    fontSize: '18px',
   },
-
   docType: {
+    fontWeight: '500',
+    color: '#1a202c',
     fontSize: '14px',
-    color: '#495057',
-    fontWeight: '500'
   },
-
-  purpose: {
-    fontSize: '14px',
-    color: '#6c757d',
-    maxWidth: '200px',
+  metaText: {
+    fontSize: '13px',
+    color: '#64748b',
+  },
+  purposeText: {
+    fontSize: '13px',
+    color: '#64748b',
+    maxWidth: '180px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap' as const
+    whiteSpace: 'nowrap' as const,
+    display: 'block',
   },
-
-  statusContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-
-  statusIcon: {
-    fontSize: '16px'
-  },
-
   statusBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
     padding: '4px 12px',
-    borderRadius: '12px',
+    borderRadius: '20px',
     fontSize: '12px',
-    fontWeight: '600',
-    color: 'white',
-    textTransform: 'capitalize' as const
+    fontWeight: '500',
+    whiteSpace: 'nowrap',
+  },
+  dateText: {
+    fontSize: '13px',
+    color: '#64748b',
   },
 
-  date: {
-    fontSize: '14px',
-    color: '#6c757d'
-  },
-
+  // Action buttons (same style as Residents)
   actionButtons: {
     display: 'flex',
-    gap: '4px'
+    gap: '8px',
   },
-
   viewButton: {
-    padding: '8px',
-    backgroundColor: '#17a2b8',
-    color: '#fff',
+    backgroundColor: '#3b82f6',
+    color: 'white',
     border: 'none',
-    borderRadius: '4px',
+    padding: '6px 12px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '14px',
-    transition: 'background-color 0.2s ease'
+    fontSize: '12px',
+    fontWeight: '500',
   },
-
   editButton: {
-    padding: '8px',
-    backgroundColor: '#ffc107',
-    color: '#fff',
+    backgroundColor: '#f59e0b',
+    color: 'white',
     border: 'none',
-    borderRadius: '4px',
+    padding: '6px 12px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '14px',
-    transition: 'background-color 0.2s ease'
+    fontSize: '12px',
+    fontWeight: '500',
   },
-
   deleteButton: {
-    padding: '8px',
-    backgroundColor: '#dc3545',
-    color: '#fff',
+    backgroundColor: '#ef4444',
+    color: 'white',
     border: 'none',
-    borderRadius: '4px',
+    padding: '6px 12px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '14px',
-    transition: 'background-color 0.2s ease'
+    fontSize: '12px',
+    fontWeight: '500',
   },
 
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    padding: '60px 20px',
-    textAlign: 'center' as const
-  },
-
-  emptyIcon: {
-    fontSize: '64px',
-    marginBottom: '16px',
-    opacity: 0.5
-  },
-
-  emptyTitle: {
-    fontSize: '20px',
-    color: '#495057',
-    margin: '0 0 8px 0',
-    fontWeight: '600'
-  },
-
-  emptyText: {
-    fontSize: '16px',
-    color: '#6c757d',
-    margin: '0 0 24px 0',
-    maxWidth: '400px'
-  },
-
-  emptyButton: {
-    padding: '12px 24px',
-    backgroundColor: '#007bff',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    fontWeight: '500'
-  },
-
+  // Loading
   loadingContainer: {
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',
     justifyContent: 'center',
-    height: '300px',
-    gap: '16px'
+    padding: '60px 20px',
   },
-
   spinner: {
-    width: '32px',
-    height: '32px',
-    border: '3px solid #f3f3f3',
-    borderTop: '3px solid #007bff',
+    width: '40px',
+    height: '40px',
+    border: '4px solid #e2e8f0',
+    borderTop: '4px solid #667eea',
     borderRadius: '50%',
-    animation: 'spin 1s linear infinite'
+    animation: 'spin 1s linear infinite',
   },
-  
   loadingText: {
-    color: '#6c757d',
+    marginTop: '16px',
+    color: '#64748b',
+    fontSize: '14px',
+  },
+
+  // Empty state
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    padding: '60px 20px',
+    gap: '12px',
+  },
+  emptyIcon: {
+    fontSize: '48px',
+    opacity: 0.5,
+  },
+  emptyTitle: {
+    color: '#1a202c',
     fontSize: '16px',
-    margin: 0
+    fontWeight: '600',
+    margin: '0',
   },
-
-  activeTab: {
-  border:'3px solid #15ff00ff',
-  marginLeft:'250px',
+  emptySubtitle: {
+    color: '#64748b',
+    fontSize: '14px',
+    margin: '0',
+    maxWidth: '360px',
+    textAlign: 'center' as const,
   },
-
-
-  inactiveTab: {
-  border:'3px solid #007bff',
-  marginLeft:'250px',
-  },
-    tabContainer: {
-      display: 'flex',
-      gap: '8px',
-      marginBottom: '20px',
-      borderBottom: '2px solid #e0e0e0',
-    },
-    tab: {
-      padding: '12px 16px',
-      border: 'none',
-      background: 'none',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: '500',
-      transition: 'all 0.2s ease',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-    },
-
-    tabIcon: {
-      fontSize: '16px',
-    },
-
 };
 
-// Add CSS animation for spinner
-const styleSheet = document.createElement('style');
-styleSheet.textContent = `
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-`;
-document.head.appendChild(styleSheet);
+// Spinner keyframes (injected once)
+const styleTag = document.createElement('style');
+styleTag.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`;
+document.head.appendChild(styleTag);
 
 export default Documents;
