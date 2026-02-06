@@ -22,6 +22,7 @@ interface Resident {
   religion?: string;
   sex?: string;
   status?: string;
+  [key: string]: any; // Allow dynamic field access for ID fields
 }
 
 const ResidentView: React.FC = () => {
@@ -30,6 +31,39 @@ const ResidentView: React.FC = () => {
   const [resident, setResident] = useState<Resident | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [voterIdUrl, setVoterIdUrl] = useState<string | null>(null);
+  const [nationalIdUrl, setNationalIdUrl] = useState<string | null>(null);
+
+  // Helper function to find voter ID from various possible field names
+  const findVoterIdUrl = (data: any): string | null => {
+    const voterIdFields = [
+      'voterID', 'voter_id', 'voterId', 'votersId', 'voters_id',
+      'voterIdPicture', 'voter_id_picture', 'voterIdImage', 'voter_id_image'
+    ];
+    
+    for (const field of voterIdFields) {
+      if (data[field] && typeof data[field] === 'string' && data[field].trim() !== '') {
+        return data[field];
+      }
+    }
+    return null;
+  };
+
+  // Helper function to find national ID from various possible field names
+  const findNationalIdUrl = (data: any): string | null => {
+    const nationalIdFields = [
+      'nationalID', 'national_id', 'nationalId', 'nationalIdPicture',
+      'national_id_picture', 'nationalIdImage', 'national_id_image',
+      'philId', 'phil_id', 'philsysId', 'philsys_id'
+    ];
+    
+    for (const field of nationalIdFields) {
+      if (data[field] && typeof data[field] === 'string' && data[field].trim() !== '') {
+        return data[field];
+      }
+    }
+    return null;
+  };
 
   const fetchResident = async () => {
     if (!id) {
@@ -44,10 +78,23 @@ const ResidentView: React.FC = () => {
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
+        const data = docSnap.data();
         setResident({
           id: docSnap.id,
-          ...docSnap.data()
+          ...data
         } as Resident);
+
+        // Extract ID URLs
+        const voterUrl = findVoterIdUrl(data);
+        const nationalUrl = findNationalIdUrl(data);
+        
+        setVoterIdUrl(voterUrl);
+        setNationalIdUrl(nationalUrl);
+
+        console.log('ID Images found:', {
+          voterIdUrl: voterUrl,
+          nationalIdUrl: nationalUrl
+        });
       } else {
         setError('Resident not found');
       }
@@ -59,10 +106,9 @@ const ResidentView: React.FC = () => {
     }
   };
 
-const handleBack = () => {
-  navigate(-1);
-};
-
+  const handleBack = () => {
+    navigate(-1);
+  };
 
   const handleEdit = () => {
     navigate(`/edit-resident/${id}`);
@@ -153,6 +199,8 @@ const handleBack = () => {
     );
   }
 
+  const hasAnyId = voterIdUrl || nationalIdUrl;
+
   return (
     <div style={styles.container}>
       <Sidebar />
@@ -202,10 +250,88 @@ const handleBack = () => {
                       Family Head
                     </span>
                   )}
+                  {hasAnyId && (
+                    <span style={{
+                      ...styles.statusBadge,
+                      backgroundColor: '#dbeafe',
+                      color: '#1e40af',
+                      marginLeft: '8px'
+                    }}>
+                      🗳️ Registered Voter
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
+
+          {/* ID Images Card (only show if at least one ID exists) */}
+          {hasAnyId && (
+            <div style={styles.idImagesCard}>
+              <h3 style={styles.cardTitle}>📋 Identification Documents</h3>
+              <div style={styles.idImagesGrid}>
+                {voterIdUrl && (
+                  <div style={styles.idImageContainer}>
+                    <div style={styles.idImageHeader}>
+                      <span style={styles.idImageTitle}>🗳️ Voter's ID</span>
+                      <a
+                        href={voterIdUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={styles.viewFullButton}
+                      >
+                        🔍 View Full Size
+                      </a>
+                    </div>
+                    <div style={styles.idImageWrapper}>
+                      <img
+                        src={voterIdUrl}
+                        alt="Voter's ID"
+                        style={styles.idImage}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          const parent = (e.target as HTMLImageElement).parentElement;
+                          if (parent) {
+                            parent.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Failed to load image</div>';
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {nationalIdUrl && (
+                  <div style={styles.idImageContainer}>
+                    <div style={styles.idImageHeader}>
+                      <span style={styles.idImageTitle}>🆔 National ID</span>
+                      <a
+                        href={nationalIdUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={styles.viewFullButton}
+                      >
+                        🔍 View Full Size
+                      </a>
+                    </div>
+                    <div style={styles.idImageWrapper}>
+                      <img
+                        src={nationalIdUrl}
+                        alt="National ID"
+                        style={styles.idImage}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          const parent = (e.target as HTMLImageElement).parentElement;
+                          if (parent) {
+                            parent.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Failed to load image</div>';
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Details Grid */}
           <div style={styles.detailsGrid}>
@@ -290,6 +416,16 @@ const handleBack = () => {
                 <div style={styles.detailItem}>
                   <span style={styles.detailLabel}>Status:</span>
                   <span style={styles.detailValue}>{resident.status || 'Not specified'}</span>
+                </div>
+                <div style={styles.detailItem}>
+                  <span style={styles.detailLabel}>Voter Registration:</span>
+                  <span style={styles.detailValue}>
+                    {hasAnyId ? (
+                      <span style={{ color: '#10b981', fontWeight: '600' }}>✓ Verified</span>
+                    ) : (
+                      <span style={{ color: '#64748b' }}>No ID on file</span>
+                    )}
+                  </span>
                 </div>
               </div>
             </div>
@@ -409,6 +545,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   statusContainer: {
     display: 'flex',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '8px',
   },
   statusBadge: {
     padding: '6px 16px',
@@ -416,6 +554,63 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     fontWeight: '500',
   },
+
+  // ID Images Card Styles
+  idImagesCard: {
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    padding: '24px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  },
+  idImagesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+    gap: '24px',
+    marginTop: '16px',
+  },
+  idImageContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  idImageHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: '8px',
+    borderBottom: '1px solid #e2e8f0',
+  },
+  idImageTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#1a202c',
+  },
+  viewFullButton: {
+    fontSize: '13px',
+    color: '#667eea',
+    textDecoration: 'none',
+    fontWeight: '500',
+    transition: 'color 0.2s',
+  },
+  idImageWrapper: {
+    width: '100%',
+    minHeight: '200px',
+    backgroundColor: '#f8fafc',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    border: '1px solid #e2e8f0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  idImage: {
+    width: '100%',
+    height: 'auto',
+    maxHeight: '400px',
+    objectFit: 'contain',
+    display: 'block',
+  },
+
   detailsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
