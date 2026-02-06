@@ -36,6 +36,12 @@ const ResidentView: React.FC = () => {
 
   // Helper function to find voter ID from various possible field names
   const findVoterIdUrl = (data: any): string | null => {
+    // First check for URL fields (Supabase URLs) - PRIORITY
+    if (data.votersIdUrl && typeof data.votersIdUrl === 'string' && data.votersIdUrl.startsWith('http')) {
+      return data.votersIdUrl;
+    }
+    
+    // Fallback to old field names for backwards compatibility
     const voterIdFields = [
       'voterID', 'voter_id', 'voterId', 'votersId', 'voters_id',
       'voterIdPicture', 'voter_id_picture', 'voterIdImage', 'voter_id_image'
@@ -43,7 +49,10 @@ const ResidentView: React.FC = () => {
     
     for (const field of voterIdFields) {
       if (data[field] && typeof data[field] === 'string' && data[field].trim() !== '') {
-        return data[field];
+        // Check if it's a URL (starts with http)
+        if (data[field].startsWith('http')) {
+          return data[field];
+        }
       }
     }
     return null;
@@ -51,6 +60,12 @@ const ResidentView: React.FC = () => {
 
   // Helper function to find national ID from various possible field names
   const findNationalIdUrl = (data: any): string | null => {
+    // First check for URL fields (Supabase URLs) - PRIORITY
+    if (data.nationalIdUrl && typeof data.nationalIdUrl === 'string' && data.nationalIdUrl.startsWith('http')) {
+      return data.nationalIdUrl;
+    }
+    
+    // Fallback to old field names for backwards compatibility
     const nationalIdFields = [
       'nationalID', 'national_id', 'nationalId', 'nationalIdPicture',
       'national_id_picture', 'nationalIdImage', 'national_id_image',
@@ -59,7 +74,10 @@ const ResidentView: React.FC = () => {
     
     for (const field of nationalIdFields) {
       if (data[field] && typeof data[field] === 'string' && data[field].trim() !== '') {
-        return data[field];
+        // Check if it's a URL (starts with http)
+        if (data[field].startsWith('http')) {
+          return data[field];
+        }
       }
     }
     return null;
@@ -385,6 +403,12 @@ const ResidentView: React.FC = () => {
                 <div style={styles.detailItem}>
                   <span style={styles.detailLabel}>Address:</span>
                   <span style={styles.detailValue}>{resident.address}</span>
+                </div>
+                <div style={styles.detailItem}>
+                  <span style={styles.detailLabel}>Contact Number:</span>
+                  <span style={styles.detailValue}>
+                    {resident.contactNumber || 'Not specified'}
+                  </span>
                 </div>
                 <div style={styles.detailItem}>
                   <span style={styles.detailLabel}>Household Number:</span>

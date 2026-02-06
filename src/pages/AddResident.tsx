@@ -4,7 +4,8 @@ import LogoutButton from '../components/LogoutButton';
 import { db } from '../Database/firebase';  
 import { collection, addDoc, getDocs } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
-import { migrateResidentsToNumericalIds } from '../Database/migration'; // Import the migration function
+import { migrateResidentsToNumericalIds } from '../Database/migration';
+import { uploadImage } from '../Database/supabaseClient';
 
 interface FormData {
     lastName: string;
@@ -15,6 +16,7 @@ interface FormData {
     occupation: string;
     status: string;
     address: string;
+    contactNumber: string;
     education: string;
     religion: string;
     householdNumber: string;
@@ -36,6 +38,7 @@ const AddResident: React.FC = () => {
         occupation: '',
         status: '',
         address: '',
+        contactNumber: '',
         education: '',
         religion: '',
         householdNumber: '',
@@ -57,6 +60,9 @@ const AddResident: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
     const [householdOption, setHouseholdOption] = useState<'new' | 'existing'>('existing');
+
+    //upload state for supabase 
+    const [uploadingIds, setUploadingIds] = useState(false);
 
     // Household selection state
     const [isNewHousehold, setIsNewHousehold] = useState(false);
@@ -127,23 +133,28 @@ const AddResident: React.FC = () => {
         return address.trim().length >= 10 && /^[a-zA-Z0-9ñÑ\s\-\.\,\#]+$/.test(address.trim());
     };
 
+    const isValidContactNumber = (contactNumber: string): boolean => {
+        if (!contactNumber) return true; // Optional field
+        // Philippine phone number format: 09XX-XXX-XXXX or +639XX-XXX-XXXX or 11 digits
+        const phoneRegex = /^(\+?63|0)?9\d{9}$/;
+        const cleanedNumber = contactNumber.replace(/[\s\-]/g, ''); // Remove spaces and dashes
+        return phoneRegex.test(cleanedNumber);
+    };
+
     const isValidDate = (dateString: string, isMovedInDate: boolean = false): boolean => {
-        if (!dateString) return !isMovedInDate; // movedInDate is optional, birthday is required
+        if (!dateString) return !isMovedInDate;
 
         const date = new Date(dateString);
         const today = new Date();
 
-        // Reset time to compare dates only
         today.setHours(23, 59, 59, 999);
 
         if (isNaN(date.getTime())) return false;
 
         if (isMovedInDate) {
-            // For moved in date: cannot be in the future, cannot be before 1900
             const minDate = new Date('1900-01-01');
             return date >= minDate && date <= today;
         } else {
-            // For birthday: cannot be in the future, must be realistic (not before 1900)
             const minDate = new Date('1900-01-01');
             return date >= minDate && date <= today;
         }
@@ -163,13 +174,13 @@ const AddResident: React.FC = () => {
     };
 
     const isValidHouseholdNumber = (householdNum: string): boolean => {
-        if (!householdNum) return true; // Optional field
+        if (!householdNum) return true;
         return /^[A-Z0-9\-]+$/i.test(householdNum.trim());
     };
 
     const isValidImageFile = (file: File): boolean => {
         const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-        const maxSize = 5 * 1024 * 1024; // 5MB
+        const maxSize = 5 * 1024 * 1024;
 
         return allowedTypes.includes(file.type) && file.size <= maxSize;
     };
@@ -224,17 +235,14 @@ const AddResident: React.FC = () => {
     useEffect(() => {
         const fetchHouseholds = async () => {
             try {
-                // Get official households
                 const householdSnapshot = await getDocs(collection(db, 'households'));
                 const officialHouseholds = householdSnapshot.docs.map(doc => doc.data().householdNumber);
                 
-                // Get residents with household numbers
                 const residentsSnapshot = await getDocs(collection(db, 'residents'));
                 const residentHouseholds = residentsSnapshot.docs
                     .map(doc => doc.data().householdNumber)
                     .filter(Boolean);
 
-                // Combine all household numbers
                 const allNumbers = [...officialHouseholds, ...residentHouseholds];
                 const uniqueNumbers = Array.from(new Set(allNumbers)).sort((a, b) => 
                     a.localeCompare(b, undefined, { numeric: true })
@@ -243,7 +251,6 @@ const AddResident: React.FC = () => {
                 setAllHouseholdNumbers(uniqueNumbers);
                 setHouseholds(uniqueNumbers);
 
-                // Generate next household number
                 const nextNumber = generateNextHouseholdNumber(uniqueNumbers);
                 setNewHouseholdNumber(nextNumber);
                 
@@ -254,7 +261,6 @@ const AddResident: React.FC = () => {
         fetchHouseholds();
     }, []);
 
-    // Update registered voter status when ID files are uploaded
     useEffect(() => {
         const hasValidId = formData.nationalId || formData.votersId;
         setFormData(prev => ({
@@ -266,7 +272,6 @@ const AddResident: React.FC = () => {
     const validateForm = (): boolean => {
         const newErrors: Partial<Record<keyof FormData, string>> = {};
 
-        // Name validations
         if (!formData.lastName.trim()) {
             newErrors.lastName = 'Last name is required';
         } else if (!isValidName(formData.lastName)) {
@@ -283,17 +288,14 @@ const AddResident: React.FC = () => {
             newErrors.middleName = 'Middle name contains invalid characters';
         }
 
-        // Sex validation
         if (!formData.sex) {
             newErrors.sex = 'Sex is required';
         }
 
-        // Wife validation - only females can be wives
         if (formData.isWife && formData.sex !== 'Female') {
             newErrors.isWife = 'Only females can be marked as wife';
         }
 
-        // Birthday validation
         if (!formData.birthday) {
             newErrors.birthday = 'Birthday is required';
         } else if (!isValidDate(formData.birthday)) {
@@ -307,19 +309,21 @@ const AddResident: React.FC = () => {
             }
         }
 
-        // Address validation
         if (!formData.address.trim()) {
             newErrors.address = 'Address is required';
         } else if (!isValidAddress(formData.address)) {
             newErrors.address = 'Address must be at least 10 characters and contain valid characters only';
         }
 
-        // Moved in date validation (if provided)
+        // Contact number validation (optional but must be valid if provided)
+        if (formData.contactNumber && !isValidContactNumber(formData.contactNumber)) {
+            newErrors.contactNumber = 'Please enter a valid Philippine mobile number (e.g., 09XX-XXX-XXXX)';
+        }
+
         if (formData.movedInDate && !isValidDate(formData.movedInDate, true)) {
             newErrors.movedInDate = 'Moved in date cannot be in the future';
         }
 
-        // If birthday and moved in date are both provided, moved in date should be after birthday
         if (formData.birthday && formData.movedInDate) {
             const birthDate = new Date(formData.birthday);
             const movedDate = new Date(formData.movedInDate);
@@ -328,24 +332,20 @@ const AddResident: React.FC = () => {
             }
         }
 
-        // Household number validation
         if (!formData.householdNumber) {
             newErrors.householdNumber = 'Household number is required';
         } else if (!isValidHouseholdNumber(formData.householdNumber)) {
             newErrors.householdNumber = 'Household number contains invalid characters';
         }
 
-        // Religion validation (if provided)
         if (formData.religion && !isValidName(formData.religion)) {
             newErrors.religion = 'Religion contains invalid characters';
         }
 
-        // Occupation validation (if provided)
         if (formData.occupation && formData.occupation.trim().length < 2) {
             newErrors.occupation = 'Occupation must be at least 2 characters long';
         }
 
-        // ID file validation
         if (formData.nationalId && !isValidImageFile(formData.nationalId)) {
             newErrors.nationalId = 'National ID must be an image file (JPEG, PNG, GIF) and less than 5MB';
         }
@@ -362,17 +362,16 @@ const AddResident: React.FC = () => {
         const { name, value, type } = e.target;
         const checked = type === 'checkbox' && (e.target as HTMLInputElement).checked;
 
-        // Sanitize input for text fields
         let sanitizedValue = value;
         if (type === 'text' && ['lastName', 'firstName', 'middleName', 'religion'].includes(name)) {
-            // Remove potentially harmful characters but keep valid name characters
             sanitizedValue = value.replace(/[^a-zA-ZñÑ\s\-\.\']/g, '');
         } else if (name === 'address') {
-            // Allow more characters for address but remove potentially harmful ones
             sanitizedValue = value.replace(/[^a-zA-Z0-9ñÑ\s\-\.\,\#]/g, '');
         } else if (name === 'householdNumber') {
-            // Only allow alphanumeric and hyphens for household number
             sanitizedValue = value.replace(/[^a-zA-Z0-9\-]/g, '');
+        } else if (name === 'contactNumber') {
+            // Allow only numbers, spaces, dashes, and + sign
+            sanitizedValue = value.replace(/[^0-9\s\-\+]/g, '');
         }
 
         setFormData(prev => ({
@@ -380,7 +379,6 @@ const AddResident: React.FC = () => {
             [name]: type === 'checkbox' ? checked : sanitizedValue,
         }));
 
-        // Clear error when user starts typing
         if (errors[name as keyof FormData]) {
             setErrors(prev => ({ ...prev, [name]: undefined }));
         }
@@ -394,87 +392,133 @@ const AddResident: React.FC = () => {
             [fieldName]: file
         }));
 
-        // Clear error when user selects a file
         if (errors[fieldName]) {
             setErrors(prev => ({ ...prev, [fieldName]: undefined }));
         }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    e.preventDefault();
 
-        if (!validateForm()) {
-            return;
+    if (!validateForm()) {
+        return;
+    }
+
+    setIsSubmitting(true);
+    setUploadingIds(true);
+
+    try {
+        let nationalIdUrl: string | null = null;
+        let votersIdUrl: string | null = null;
+
+        if (formData.nationalId) {
+            console.log('📤 Uploading National ID to Supabase...');
+            console.log('File:', formData.nationalId.name, formData.nationalId.type, formData.nationalId.size);
+            nationalIdUrl = await uploadImage(formData.nationalId, 'resident-ids', 'national-ids');
+            console.log('✅ National ID uploaded:', nationalIdUrl);
         }
 
-        setIsSubmitting(true);
-
-        try {
-            const finalData = {
-                ...formData,
-                movedInDate: formData.movedInDate || new Date().toISOString().split('T')[0],
-                createdAt: new Date().toISOString(),
-                // Clean up data
-                lastName: formData.lastName.trim(),
-                firstName: formData.firstName.trim(),
-                middleName: formData.middleName.trim(),
-                address: formData.address.trim(),
-                religion: formData.religion.trim(),
-                occupation: formData.occupation.trim(),
-                householdNumber: formData.householdNumber.trim(),
-                // Remove file objects for Firestore (you'll need to handle file upload separately)
-                nationalId: formData.nationalId ? formData.nationalId.name : null,
-                votersId: formData.votersId ? formData.votersId.name : null,
-                // Voter registration status
-                isRegisteredVoter: !!(formData.nationalId || formData.votersId),
-                voterRegistrationDate: (formData.nationalId || formData.votersId) ? new Date().toISOString() : null
-            };
-
-            await addDoc(collection(db, 'residents'), finalData);
-
-            // ✨ AUTOMATICALLY ASSIGN NUMERICAL IDs AFTER ADDING RESIDENT
-            console.log('🔄 Assigning numerical IDs to all residents...');
-            await migrateResidentsToNumericalIds();
-            console.log('✅ Numerical IDs assigned successfully!');
-
-            // Reset form
-            setFormData({
-                lastName: '',
-                firstName: '',
-                middleName: '',
-                sex: '',
-                birthday: '',
-                occupation: '',
-                status: '',
-                address: '',
-                education: '',
-                religion: '',
-                householdNumber: '',
-                isFamilyHead: false,
-                isWife: false,
-                movedInDate: '',
-                nationalId: null,
-                votersId: null,
-                isRegisteredVoter: false
-            });
-            setCustomOccupation('');
-            setIsCustomOccupation(false);
-            setErrors({});
-
-            alert('✅ Resident added successfully!' + (finalData.isRegisteredVoter ? ' Classified as registered voter.' : '') + ' Numerical IDs have been assigned.');
-
-            // Navigate back to residents list after successful submission
-            navigate('/residents');
-
-        } catch (error: any) {
-            console.error('Error adding resident:', error);
-            alert('❌ Failed to add resident: ' + (error.message || 'Unknown error'));
-        } finally {
-            setIsSubmitting(false);
+        if (formData.votersId) {
+            console.log('📤 Uploading Voter\'s ID to Supabase...');
+            console.log('File:', formData.votersId.name, formData.votersId.type, formData.votersId.size);
+            votersIdUrl = await uploadImage(formData.votersId, 'resident-ids', 'voters-ids');
+            console.log('✅ Voter\'s ID uploaded:', votersIdUrl);
         }
-    };
 
-    const renderField = (label: string, name: keyof FormData, type: string = 'text', required: boolean = false) => (
+        setUploadingIds(false);
+
+        // ✅ Build object manually - NO spreading formData!
+        const finalData: any = {
+            lastName: formData.lastName.trim(),
+            firstName: formData.firstName.trim(),
+            middleName: formData.middleName.trim(),
+            sex: formData.sex,
+            birthday: formData.birthday,
+            occupation: formData.occupation.trim(),
+            status: formData.status,
+            address: formData.address.trim(),
+            contactNumber: formData.contactNumber.trim(),
+            education: formData.education,
+            religion: formData.religion.trim(),
+            householdNumber: formData.householdNumber.trim(),
+            isFamilyHead: formData.isFamilyHead,
+            isWife: formData.isWife,
+            movedInDate: formData.movedInDate || new Date().toISOString().split('T')[0],
+            createdAt: new Date().toISOString(),
+        };
+
+        // ✅ Only add URLs if they exist
+        if (nationalIdUrl) {
+            finalData.nationalIdUrl = nationalIdUrl;
+        }
+        if (votersIdUrl) {
+            finalData.votersIdUrl = votersIdUrl;
+        }
+
+        // Voter registration status
+        finalData.isRegisteredVoter = !!(nationalIdUrl || votersIdUrl);
+        if (nationalIdUrl || votersIdUrl) {
+            finalData.voterRegistrationDate = new Date().toISOString();
+        }
+
+        console.log('💾 Saving to Firestore:', finalData);
+        await addDoc(collection(db, 'residents'), finalData);
+
+        console.log('🔄 Assigning numerical IDs...');
+        await migrateResidentsToNumericalIds();
+        console.log('✅ Done!');
+
+        // Reset form
+        setFormData({
+            lastName: '',
+            firstName: '',
+            middleName: '',
+            sex: '',
+            birthday: '',
+            occupation: '',
+            status: '',
+            address: '',
+            contactNumber: '',
+            education: '',
+            religion: '',
+            householdNumber: '',
+            isFamilyHead: false,
+            isWife: false,
+            movedInDate: '',
+            nationalId: null,
+            votersId: null,
+            isRegisteredVoter: false
+        });
+        setCustomOccupation('');
+        setIsCustomOccupation(false);
+        setErrors({});
+
+        const voterMessage = finalData.isRegisteredVoter ? ' Classified as registered voter.' : '';
+        alert('✅ Resident added successfully!' + voterMessage + ' Numerical IDs have been assigned.');
+
+        navigate('/residents');
+
+    } catch (error: any) {
+        console.error('❌ Error:', error);
+        console.error('Stack:', error.stack);
+        
+        let errorMessage = 'Failed to add resident: ';
+        if (error.message?.includes('storage') || error.message?.includes('upload')) {
+            errorMessage += 'Image upload failed. Check console for details.';
+        } else if (error.message?.includes('invalid data') || error.message?.includes('Unsupported field')) {
+            errorMessage += 'Invalid data: ' + error.message;
+        } else {
+            errorMessage += (error.message || 'Unknown error');
+        }
+        
+        alert('❌ ' + errorMessage);
+    } finally {
+        setIsSubmitting(false);
+        setUploadingIds(false);
+    }
+};
+
+    const renderField = (label: string, name: keyof FormData, type: string = 'text', required: boolean = false, placeholder?: string) => (
         <div style={styles.fieldGroup}>
             <label style={styles.label}>
                 {label} {required && <span style={styles.required}>*</span>}
@@ -489,7 +533,7 @@ const AddResident: React.FC = () => {
                     ...(errors[name] ? styles.inputError : {})
                 }}
                 required={required}
-                placeholder={`Enter ${label.toLowerCase()}`}
+                placeholder={placeholder || `Enter ${label.toLowerCase()}`}
                 max={type === 'date' ? new Date().toISOString().split('T')[0] : undefined}
             />
             {errors[name] && <span style={styles.errorText}>{errors[name]}</span>}
@@ -612,6 +656,10 @@ const AddResident: React.FC = () => {
                                     placeholder="Enter complete address (minimum 10 characters)"
                                 />
                                 {errors.address && <span style={styles.errorText}>{errors.address}</span>}
+                            </div>
+
+                            <div style={styles.row}>
+                                {renderField('Contact Number', 'contactNumber', 'tel', false, '09XX-XXX-XXXX')}
                             </div>
                         </div>
 
@@ -827,26 +875,26 @@ const AddResident: React.FC = () => {
                         {/* Submit Button */}
                         <div style={styles.submitSection}>
                             <button
-                                type="submit"
-                                style={{
-                                    ...styles.submitButton,
-                                    ...(isSubmitting ? styles.submitButtonDisabled : {})
-                                }}
-                                disabled={isSubmitting}
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <span style={styles.spinner}>⏳</span>
-                                        Adding Resident...
-                                    </>
-                                ) : (
-                                    <>
-                                        <span style={styles.buttonIcon}>✅</span>
-                                        Add Resident
-                                        {formData.isRegisteredVoter && <span style={styles.voterText}> (as Registered Voter)</span>}
-                                    </>
-                                )}
-                            </button>
+    type="submit"
+    style={{
+        ...styles.submitButton,
+        ...(isSubmitting ? styles.submitButtonDisabled : {})
+    }}
+    disabled={isSubmitting}
+>
+    {isSubmitting ? (
+        <>
+            <span style={styles.spinner}>⏳</span>
+            {uploadingIds ? 'Uploading Images...' : 'Adding Resident...'}
+        </>
+    ) : (
+        <>
+            <span style={styles.buttonIcon}>✅</span>
+            Add Resident
+            {formData.isRegisteredVoter && <span style={styles.voterText}> (as Registered Voter)</span>}
+        </>
+    )}
+</button>
                         </div>
                     </form>
                 </div>
