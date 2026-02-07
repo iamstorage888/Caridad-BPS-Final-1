@@ -21,6 +21,7 @@ import EditHousehold from './pages/EditHousehold';
 import RequestDocument from './pages/RequestDocument';
 import ViewDocumentRequest from './pages/ViewDocumentRequest';
 import AddBlotter from './pages/AddBlotter';
+import EditBlotter from './pages/EditBlotter';
 import EditDocumentRequest from './pages/EditDocumentRequest';
 import AddUser from './pages/RegisterPage';
 import Archive from './pages/Archives';
@@ -487,7 +488,7 @@ const AppRoutes = () => {
         } 
       />
 
-            <Route 
+      <Route 
         path="/archives" 
         element={
           <ProtectedRoute allowedRoles={['secretary']}>
@@ -500,6 +501,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['secretary']}>
             <AddBlotter />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/edit-blotter/:id" 
+        element={
+          <ProtectedRoute allowedRoles={['secretary']}>
+            <EditBlotter />
           </ProtectedRoute>
         } 
       />

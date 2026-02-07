@@ -91,9 +91,31 @@ const HomePage: React.FC = () => {
     return age;
   };
 
-  // Function to check if resident has voter/national ID
+  // Function to check if resident has voter/national ID - UPDATED FOR NEW FORMAT
   const hasVoterOrNationalID = (data: any): boolean => {
-    // Check for common field names that might contain voter ID or national ID
+    // NEW FORMAT: Check for front/back ID URLs (priority)
+    if (data.nationalIdFrontUrl || data.nationalIdBackUrl) {
+      console.log(`✅ Found National ID (new format - front/back)`);
+      return true;
+    }
+    
+    if (data.votersIdFrontUrl || data.votersIdBackUrl) {
+      console.log(`✅ Found Voter's ID (new format - front/back)`);
+      return true;
+    }
+
+    // OLD FORMAT: Check for single ID URL
+    if (data.nationalIdUrl && typeof data.nationalIdUrl === 'string' && data.nationalIdUrl.startsWith('http')) {
+      console.log(`✅ Found National ID (old format - single URL)`);
+      return true;
+    }
+    
+    if (data.votersIdUrl && typeof data.votersIdUrl === 'string' && data.votersIdUrl.startsWith('http')) {
+      console.log(`✅ Found Voter's ID (old format - single URL)`);
+      return true;
+    }
+
+    // LEGACY FORMAT: Check for old field names
     const voterIdFields = [
       'voterID', 'voter_id', 'voterId', 'votersId', 'voters_id',
       'voterIdPicture', 'voter_id_picture', 'voterIdImage', 'voter_id_image'
@@ -108,27 +130,29 @@ const HomePage: React.FC = () => {
     // Check for any voter ID fields
     for (const field of voterIdFields) {
       if (data[field] && data[field] !== '' && data[field] !== null) {
-        console.log(`Found voter ID in field: ${field}`);
-        return true;
+        // Only count if it's a URL (not just a filename)
+        if (typeof data[field] === 'string' && data[field].startsWith('http')) {
+          console.log(`✅ Found voter ID in legacy field: ${field}`);
+          return true;
+        }
       }
     }
 
     // Check for any national ID fields
     for (const field of nationalIdFields) {
       if (data[field] && data[field] !== '' && data[field] !== null) {
-        console.log(`Found national ID in field: ${field}`);
-        return true;
+        // Only count if it's a URL (not just a filename)
+        if (typeof data[field] === 'string' && data[field].startsWith('http')) {
+          console.log(`✅ Found national ID in legacy field: ${field}`);
+          return true;
+        }
       }
     }
 
-    // Additional check for generic ID fields that might contain voter/national ID
-    const genericIdFields = ['idPicture', 'id_picture', 'idImage', 'id_image', 'validId', 'valid_id'];
-    for (const field of genericIdFields) {
-      if (data[field] && data[field] !== '' && data[field] !== null) {
-        // You might want to add additional logic here to determine if it's specifically a voter/national ID
-        console.log(`Found ID in generic field: ${field}`);
-        return true;
-      }
+    // Check isRegisteredVoter flag as fallback
+    if (data.isRegisteredVoter === true) {
+      console.log(`✅ Found via isRegisteredVoter flag`);
+      return true;
     }
 
     return false;
@@ -144,7 +168,7 @@ const HomePage: React.FC = () => {
       let males = 0;
       let females = 0;
       let seniors = 0;
-      let voters = 0; // Updated: Count based on ID submission instead of age
+      let voters = 0;
 
       const occupationMap: { [key: string]: number } = {};
       const purokMap: { [key: string]: number } = {};
@@ -159,7 +183,7 @@ const HomePage: React.FC = () => {
       });
 
       // Debug: Log some sample data
-      console.log('=== DEBUGGING RESIDENT CALCULATIONS ===');
+      console.log('=== DEBUGGING RESIDENT CALCULATIONS (NEW ID FORMAT) ===');
       console.log('Total residents found:', residentSnapshot.size);
       
       // Track all possible ID field names
@@ -189,22 +213,24 @@ const HomePage: React.FC = () => {
             key.toLowerCase().includes('id') || key.toLowerCase().includes('voter') || key.toLowerCase().includes('national')
           ).map(key => ({ [key]: data[key] })));
           console.log('Sex:', data.sex);
-          console.log('Occupation:', data.occupation);
+          console.log('isRegisteredVoter flag:', data.isRegisteredVoter);
         }
 
         if (data.sex === 'Male') males++;
         if (data.sex === 'Female') females++;
 
-        // Check for voter/national ID submission
+        // Check for voter/national ID submission (UPDATED FUNCTION)
         const hasValidId = hasVoterOrNationalID(data);
         if (hasValidId) {
           voters++;
           votersWithIdCount++;
-          console.log(`🗳️ REGISTERED VOTER (with ID): ${data.firstName} ${data.lastName}`);
+          if (index < 10) {
+            console.log(`🗳️ REGISTERED VOTER: ${data.firstName} ${data.lastName}`);
+          }
         } else {
           votersWithoutIdCount++;
           if (index < 10) {
-            console.log(`❌ No voter/national ID found for: ${data.firstName} ${data.lastName}`);
+            console.log(`❌ No ID found for: ${data.firstName} ${data.lastName}`);
           }
         }
 
@@ -225,7 +251,6 @@ const HomePage: React.FC = () => {
           // Count senior citizens (60+)
           if (age >= 60) {
             seniors++;
-            console.log(`🎉 SENIOR CITIZEN FOUND: Age ${age}, DOB: ${birthDate}`);
           }
         }
 
@@ -239,10 +264,10 @@ const HomePage: React.FC = () => {
         index++;
       });
 
-      console.log('=== SUMMARY ===');
+      console.log('=== SUMMARY (UPDATED ID DETECTION) ===');
       console.log('ID fields found in database:', Array.from(idFields));
-      console.log('Residents with voter/national ID:', votersWithIdCount);
-      console.log('Residents without voter/national ID:', votersWithoutIdCount);
+      console.log('✅ Residents with voter/national ID:', votersWithIdCount);
+      console.log('❌ Residents without voter/national ID:', votersWithoutIdCount);
       console.log('Final counts:', {
         total,
         males,
@@ -257,7 +282,7 @@ const HomePage: React.FC = () => {
       setMaleCount(males);
       setFemaleCount(females);
       setSeniorCitizenCount(seniors);
-      setRegisteredVotersCount(voters); // Updated: Now based on ID submission
+      setRegisteredVotersCount(voters);
       setOccupationData(Object.entries(occupationMap).map(([name, value]) => ({ name, value })));
       setPurokData(Object.entries(purokMap).map(([name, value]) => ({ name, value })));
     };
@@ -277,7 +302,7 @@ const HomePage: React.FC = () => {
 
         snapshot.forEach(doc => {
           const data = doc.data();
-          const status = data.status || 'filed'; // Default to 'filed' if no status
+          const status = data.status || 'filed';
           statusMap[status] = (statusMap[status] || 0) + 1;
         });
 
@@ -313,14 +338,13 @@ const HomePage: React.FC = () => {
     { title: 'Female', value: femaleCount, icon: '👩', color: '#f093fb', path: '/residents?filter=female' },
     { title: 'Senior Citizens', value: seniorCitizenCount, icon: '👴', color: '#f5576c', path: '/residents?filter=senior' },
     { 
-  title: 'Registered Voters',
-  value: registeredVotersCount,
-  icon: '🗳️',
-  color: '#764ba2',
-  subtitle: 'With Valid ID',
-  path: '/residents?filter=voterRegistrationDate !== null' // instead of just "voters"
-},
-
+      title: 'Registered Voters',
+      value: registeredVotersCount,
+      icon: '🗳️',
+      color: '#764ba2',
+      subtitle: 'With Valid ID',
+      path: '/residents?filter=voters'
+    },
     { title: 'Total Households', value: householdCount, icon: '🏠', color: '#43e97b', path: '/households' },
     { title: 'Blotter Reports', value: blotterCount, icon: '📋', color: '#ff6b6b', path: '/blotter' },
     { title: 'Documents', value: blotterCount, icon: '📋', color: '#6bffabff', path: '/documents' },

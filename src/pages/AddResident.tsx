@@ -23,8 +23,10 @@ interface FormData {
     isFamilyHead: boolean;
     isWife: boolean;
     movedInDate: string;
-    nationalId: File | null;
-    votersId: File | null;
+    nationalIdFront: File | null;
+    nationalIdBack: File | null;
+    votersIdFront: File | null;
+    votersIdBack: File | null;
     isRegisteredVoter: boolean;
 }
 
@@ -45,8 +47,10 @@ const AddResident: React.FC = () => {
         isFamilyHead: false,
         isWife: false,
         movedInDate: '',
-        nationalId: null,
-        votersId: null,
+        nationalIdFront: null,
+        nationalIdBack: null,
+        votersIdFront: null,
+        votersIdBack: null,
         isRegisteredVoter: false
     });
 
@@ -134,10 +138,9 @@ const AddResident: React.FC = () => {
     };
 
     const isValidContactNumber = (contactNumber: string): boolean => {
-        if (!contactNumber) return true; // Optional field
-        // Philippine phone number format: 09XX-XXX-XXXX or +639XX-XXX-XXXX or 11 digits
+        if (!contactNumber) return true;
         const phoneRegex = /^(\+?63|0)?9\d{9}$/;
-        const cleanedNumber = contactNumber.replace(/[\s\-]/g, ''); // Remove spaces and dashes
+        const cleanedNumber = contactNumber.replace(/[\s\-]/g, '');
         return phoneRegex.test(cleanedNumber);
     };
 
@@ -262,12 +265,13 @@ const AddResident: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const hasValidId = formData.nationalId || formData.votersId;
+        const hasValidId = formData.nationalIdFront || formData.nationalIdBack || 
+                          formData.votersIdFront || formData.votersIdBack;
         setFormData(prev => ({
             ...prev,
             isRegisteredVoter: !!hasValidId
         }));
-    }, [formData.nationalId, formData.votersId]);
+    }, [formData.nationalIdFront, formData.nationalIdBack, formData.votersIdFront, formData.votersIdBack]);
 
     const validateForm = (): boolean => {
         const newErrors: Partial<Record<keyof FormData, string>> = {};
@@ -315,7 +319,6 @@ const AddResident: React.FC = () => {
             newErrors.address = 'Address must be at least 10 characters and contain valid characters only';
         }
 
-        // Contact number validation (optional but must be valid if provided)
         if (formData.contactNumber && !isValidContactNumber(formData.contactNumber)) {
             newErrors.contactNumber = 'Please enter a valid Philippine mobile number (e.g., 09XX-XXX-XXXX)';
         }
@@ -346,12 +349,18 @@ const AddResident: React.FC = () => {
             newErrors.occupation = 'Occupation must be at least 2 characters long';
         }
 
-        if (formData.nationalId && !isValidImageFile(formData.nationalId)) {
-            newErrors.nationalId = 'National ID must be an image file (JPEG, PNG, GIF) and less than 5MB';
+        // Validate ID files
+        if (formData.nationalIdFront && !isValidImageFile(formData.nationalIdFront)) {
+            newErrors.nationalIdFront = 'National ID (Front) must be an image file (JPEG, PNG, GIF) and less than 5MB';
         }
-
-        if (formData.votersId && !isValidImageFile(formData.votersId)) {
-            newErrors.votersId = 'Voter\'s ID must be an image file (JPEG, PNG, GIF) and less than 5MB';
+        if (formData.nationalIdBack && !isValidImageFile(formData.nationalIdBack)) {
+            newErrors.nationalIdBack = 'National ID (Back) must be an image file (JPEG, PNG, GIF) and less than 5MB';
+        }
+        if (formData.votersIdFront && !isValidImageFile(formData.votersIdFront)) {
+            newErrors.votersIdFront = 'Voter\'s ID (Front) must be an image file (JPEG, PNG, GIF) and less than 5MB';
+        }
+        if (formData.votersIdBack && !isValidImageFile(formData.votersIdBack)) {
+            newErrors.votersIdBack = 'Voter\'s ID (Back) must be an image file (JPEG, PNG, GIF) and less than 5MB';
         }
 
         setErrors(newErrors);
@@ -370,7 +379,6 @@ const AddResident: React.FC = () => {
         } else if (name === 'householdNumber') {
             sanitizedValue = value.replace(/[^a-zA-Z0-9\-]/g, '');
         } else if (name === 'contactNumber') {
-            // Allow only numbers, spaces, dashes, and + sign
             sanitizedValue = value.replace(/[^0-9\s\-\+]/g, '');
         }
 
@@ -384,7 +392,7 @@ const AddResident: React.FC = () => {
         }
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fieldName: 'nationalId' | 'votersId') => {
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fieldName: keyof FormData) => {
         const file = e.target.files?.[0] || null;
 
         setFormData(prev => ({
@@ -398,125 +406,149 @@ const AddResident: React.FC = () => {
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+        e.preventDefault();
 
-    if (!validateForm()) {
-        return;
-    }
-
-    setIsSubmitting(true);
-    setUploadingIds(true);
-
-    try {
-        let nationalIdUrl: string | null = null;
-        let votersIdUrl: string | null = null;
-
-        if (formData.nationalId) {
-            console.log('📤 Uploading National ID to Supabase...');
-            console.log('File:', formData.nationalId.name, formData.nationalId.type, formData.nationalId.size);
-            nationalIdUrl = await uploadImage(formData.nationalId, 'resident-ids', 'national-ids');
-            console.log('✅ National ID uploaded:', nationalIdUrl);
+        if (!validateForm()) {
+            return;
         }
 
-        if (formData.votersId) {
-            console.log('📤 Uploading Voter\'s ID to Supabase...');
-            console.log('File:', formData.votersId.name, formData.votersId.type, formData.votersId.size);
-            votersIdUrl = await uploadImage(formData.votersId, 'resident-ids', 'voters-ids');
-            console.log('✅ Voter\'s ID uploaded:', votersIdUrl);
+        setIsSubmitting(true);
+        setUploadingIds(true);
+
+        try {
+            // Upload all ID images to Supabase
+            let nationalIdFrontUrl: string | null = null;
+            let nationalIdBackUrl: string | null = null;
+            let votersIdFrontUrl: string | null = null;
+            let votersIdBackUrl: string | null = null;
+
+            if (formData.nationalIdFront) {
+                console.log('📤 Uploading National ID (Front)...');
+                nationalIdFrontUrl = await uploadImage(formData.nationalIdFront, 'resident-ids', 'national-ids/front');
+                console.log('✅ National ID (Front) uploaded:', nationalIdFrontUrl);
+            }
+
+            if (formData.nationalIdBack) {
+                console.log('📤 Uploading National ID (Back)...');
+                nationalIdBackUrl = await uploadImage(formData.nationalIdBack, 'resident-ids', 'national-ids/back');
+                console.log('✅ National ID (Back) uploaded:', nationalIdBackUrl);
+            }
+
+            if (formData.votersIdFront) {
+                console.log('📤 Uploading Voter\'s ID (Front)...');
+                votersIdFrontUrl = await uploadImage(formData.votersIdFront, 'resident-ids', 'voters-ids/front');
+                console.log('✅ Voter\'s ID (Front) uploaded:', votersIdFrontUrl);
+            }
+
+            if (formData.votersIdBack) {
+                console.log('📤 Uploading Voter\'s ID (Back)...');
+                votersIdBackUrl = await uploadImage(formData.votersIdBack, 'resident-ids', 'voters-ids/back');
+                console.log('✅ Voter\'s ID (Back) uploaded:', votersIdBackUrl);
+            }
+
+            setUploadingIds(false);
+
+            // Build finalData object manually (NO spreading formData to avoid File objects)
+            const finalData: any = {
+                lastName: formData.lastName.trim(),
+                firstName: formData.firstName.trim(),
+                middleName: formData.middleName.trim(),
+                sex: formData.sex,
+                birthday: formData.birthday,
+                occupation: formData.occupation.trim(),
+                status: formData.status,
+                address: formData.address.trim(),
+                contactNumber: formData.contactNumber.trim(),
+                education: formData.education,
+                religion: formData.religion.trim(),
+                householdNumber: formData.householdNumber.trim(),
+                isFamilyHead: formData.isFamilyHead,
+                isWife: formData.isWife,
+                movedInDate: formData.movedInDate || new Date().toISOString().split('T')[0],
+                createdAt: new Date().toISOString(),
+            };
+
+            // Add ID URLs only if they exist
+            if (nationalIdFrontUrl) {
+                finalData.nationalIdFrontUrl = nationalIdFrontUrl;
+            }
+            if (nationalIdBackUrl) {
+                finalData.nationalIdBackUrl = nationalIdBackUrl;
+            }
+            if (votersIdFrontUrl) {
+                finalData.votersIdFrontUrl = votersIdFrontUrl;
+            }
+            if (votersIdBackUrl) {
+                finalData.votersIdBackUrl = votersIdBackUrl;
+            }
+
+            // Determine if registered voter
+            const hasNationalId = nationalIdFrontUrl || nationalIdBackUrl;
+            const hasVotersId = votersIdFrontUrl || votersIdBackUrl;
+            finalData.isRegisteredVoter = !!(hasNationalId || hasVotersId);
+            
+            if (finalData.isRegisteredVoter) {
+                finalData.voterRegistrationDate = new Date().toISOString();
+            }
+
+            console.log('💾 Saving to Firestore:', finalData);
+            await addDoc(collection(db, 'residents'), finalData);
+
+            console.log('🔄 Assigning numerical IDs...');
+            await migrateResidentsToNumericalIds();
+            console.log('✅ Done!');
+
+            // Reset form
+            setFormData({
+                lastName: '',
+                firstName: '',
+                middleName: '',
+                sex: '',
+                birthday: '',
+                occupation: '',
+                status: '',
+                address: '',
+                contactNumber: '',
+                education: '',
+                religion: '',
+                householdNumber: '',
+                isFamilyHead: false,
+                isWife: false,
+                movedInDate: '',
+                nationalIdFront: null,
+                nationalIdBack: null,
+                votersIdFront: null,
+                votersIdBack: null,
+                isRegisteredVoter: false
+            });
+            setCustomOccupation('');
+            setIsCustomOccupation(false);
+            setErrors({});
+
+            const voterMessage = finalData.isRegisteredVoter ? ' Classified as registered voter.' : '';
+            alert('✅ Resident added successfully!' + voterMessage + ' Numerical IDs have been assigned.');
+
+            navigate('/residents');
+
+        } catch (error: any) {
+            console.error('❌ Error:', error);
+            console.error('Stack:', error.stack);
+            
+            let errorMessage = 'Failed to add resident: ';
+            if (error.message?.includes('storage') || error.message?.includes('upload')) {
+                errorMessage += 'Image upload failed. Check console for details.';
+            } else if (error.message?.includes('invalid data') || error.message?.includes('Unsupported field')) {
+                errorMessage += 'Invalid data: ' + error.message;
+            } else {
+                errorMessage += (error.message || 'Unknown error');
+            }
+            
+            alert('❌ ' + errorMessage);
+        } finally {
+            setIsSubmitting(false);
+            setUploadingIds(false);
         }
-
-        setUploadingIds(false);
-
-        // ✅ Build object manually - NO spreading formData!
-        const finalData: any = {
-            lastName: formData.lastName.trim(),
-            firstName: formData.firstName.trim(),
-            middleName: formData.middleName.trim(),
-            sex: formData.sex,
-            birthday: formData.birthday,
-            occupation: formData.occupation.trim(),
-            status: formData.status,
-            address: formData.address.trim(),
-            contactNumber: formData.contactNumber.trim(),
-            education: formData.education,
-            religion: formData.religion.trim(),
-            householdNumber: formData.householdNumber.trim(),
-            isFamilyHead: formData.isFamilyHead,
-            isWife: formData.isWife,
-            movedInDate: formData.movedInDate || new Date().toISOString().split('T')[0],
-            createdAt: new Date().toISOString(),
-        };
-
-        // ✅ Only add URLs if they exist
-        if (nationalIdUrl) {
-            finalData.nationalIdUrl = nationalIdUrl;
-        }
-        if (votersIdUrl) {
-            finalData.votersIdUrl = votersIdUrl;
-        }
-
-        // Voter registration status
-        finalData.isRegisteredVoter = !!(nationalIdUrl || votersIdUrl);
-        if (nationalIdUrl || votersIdUrl) {
-            finalData.voterRegistrationDate = new Date().toISOString();
-        }
-
-        console.log('💾 Saving to Firestore:', finalData);
-        await addDoc(collection(db, 'residents'), finalData);
-
-        console.log('🔄 Assigning numerical IDs...');
-        await migrateResidentsToNumericalIds();
-        console.log('✅ Done!');
-
-        // Reset form
-        setFormData({
-            lastName: '',
-            firstName: '',
-            middleName: '',
-            sex: '',
-            birthday: '',
-            occupation: '',
-            status: '',
-            address: '',
-            contactNumber: '',
-            education: '',
-            religion: '',
-            householdNumber: '',
-            isFamilyHead: false,
-            isWife: false,
-            movedInDate: '',
-            nationalId: null,
-            votersId: null,
-            isRegisteredVoter: false
-        });
-        setCustomOccupation('');
-        setIsCustomOccupation(false);
-        setErrors({});
-
-        const voterMessage = finalData.isRegisteredVoter ? ' Classified as registered voter.' : '';
-        alert('✅ Resident added successfully!' + voterMessage + ' Numerical IDs have been assigned.');
-
-        navigate('/residents');
-
-    } catch (error: any) {
-        console.error('❌ Error:', error);
-        console.error('Stack:', error.stack);
-        
-        let errorMessage = 'Failed to add resident: ';
-        if (error.message?.includes('storage') || error.message?.includes('upload')) {
-            errorMessage += 'Image upload failed. Check console for details.';
-        } else if (error.message?.includes('invalid data') || error.message?.includes('Unsupported field')) {
-            errorMessage += 'Invalid data: ' + error.message;
-        } else {
-            errorMessage += (error.message || 'Unknown error');
-        }
-        
-        alert('❌ ' + errorMessage);
-    } finally {
-        setIsSubmitting(false);
-        setUploadingIds(false);
-    }
-};
+    };
 
     const renderField = (label: string, name: keyof FormData, type: string = 'text', required: boolean = false, placeholder?: string) => (
         <div style={styles.fieldGroup}>
@@ -564,7 +596,7 @@ const AddResident: React.FC = () => {
         </div>
     );
 
-    const renderFileInput = (label: string, name: 'nationalId' | 'votersId') => (
+    const renderFileInput = (label: string, name: keyof FormData) => (
         <div style={styles.fieldGroup}>
             <label style={styles.label}>{label}</label>
             <input
@@ -578,7 +610,7 @@ const AddResident: React.FC = () => {
             />
             {formData[name] && (
                 <div style={styles.filePreview}>
-                    <span style={styles.fileName}>📎 {formData[name]?.name}</span>
+                    <span style={styles.fileName}>📎 {(formData[name] as File)?.name}</span>
                     <button
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, [name]: null }))}
@@ -863,38 +895,51 @@ const AddResident: React.FC = () => {
                                 )}
                             </h3>
                             <p style={styles.sectionDescription}>
-                                Upload National ID or Voter's ID to automatically classify as registered voter
+                                Upload front and back photos of National ID or Voter's ID to automatically classify as registered voter
                             </p>
 
-                            <div style={styles.row}>
-                                {renderFileInput('National ID', 'nationalId')}
-                                {renderFileInput('Voter\'s ID', 'votersId')}
+                            {/* National ID Section */}
+                            <div style={styles.idSection}>
+                                <h4 style={styles.idSectionTitle}>🪪 National ID</h4>
+                                <div style={styles.row}>
+                                    {renderFileInput('Front Photo', 'nationalIdFront')}
+                                    {renderFileInput('Back Photo', 'nationalIdBack')}
+                                </div>
+                            </div>
+
+                            {/* Voter's ID Section */}
+                            <div style={styles.idSection}>
+                                <h4 style={styles.idSectionTitle}>🗳️ Voter's ID</h4>
+                                <div style={styles.row}>
+                                    {renderFileInput('Front Photo', 'votersIdFront')}
+                                    {renderFileInput('Back Photo', 'votersIdBack')}
+                                </div>
                             </div>
                         </div>
 
                         {/* Submit Button */}
                         <div style={styles.submitSection}>
                             <button
-    type="submit"
-    style={{
-        ...styles.submitButton,
-        ...(isSubmitting ? styles.submitButtonDisabled : {})
-    }}
-    disabled={isSubmitting}
->
-    {isSubmitting ? (
-        <>
-            <span style={styles.spinner}>⏳</span>
-            {uploadingIds ? 'Uploading Images...' : 'Adding Resident...'}
-        </>
-    ) : (
-        <>
-            <span style={styles.buttonIcon}>✅</span>
-            Add Resident
-            {formData.isRegisteredVoter && <span style={styles.voterText}> (as Registered Voter)</span>}
-        </>
-    )}
-</button>
+                                type="submit"
+                                style={{
+                                    ...styles.submitButton,
+                                    ...(isSubmitting ? styles.submitButtonDisabled : {})
+                                }}
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <span style={styles.spinner}>⏳</span>
+                                        {uploadingIds ? 'Uploading Images...' : 'Adding Resident...'}
+                                    </>
+                                ) : (
+                                    <>
+                                        <span style={styles.buttonIcon}>✅</span>
+                                        Add Resident
+                                        {formData.isRegisteredVoter && <span style={styles.voterText}> (as Registered Voter)</span>}
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -992,6 +1037,19 @@ const styles: { [key: string]: React.CSSProperties } = {
         fontSize: '14px',
         color: '#64748b',
         margin: '0 0 20px 0',
+    },
+    idSection: {
+        marginTop: '24px',
+        padding: '20px',
+        backgroundColor: '#f8fafc',
+        borderRadius: '8px',
+        border: '1px solid #e2e8f0',
+    },
+    idSectionTitle: {
+        margin: '0 0 16px 0',
+        fontSize: '16px',
+        fontWeight: '600',
+        color: '#374151',
     },
     row: {
         display: 'grid',

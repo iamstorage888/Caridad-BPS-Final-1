@@ -68,26 +68,61 @@ const getBirthDate = (data: Resident): string | null => {
   return null;
 };
 
+// FIXED: Updated to match HomePage's logic for new ID format
 const hasVoterOrNationalID = (data: Resident): boolean => {
+  // NEW FORMAT: Check for front/back ID URLs (priority)
+  if (data.nationalIdFrontUrl || data.nationalIdBackUrl) {
+    return true;
+  }
+  
+  if (data.votersIdFrontUrl || data.votersIdBackUrl) {
+    return true;
+  }
+
+  // OLD FORMAT: Check for single ID URL
+  if (data.nationalIdUrl && typeof data.nationalIdUrl === 'string' && data.nationalIdUrl.startsWith('http')) {
+    return true;
+  }
+  
+  if (data.votersIdUrl && typeof data.votersIdUrl === 'string' && data.votersIdUrl.startsWith('http')) {
+    return true;
+  }
+
+  // LEGACY FORMAT: Check for old field names
   const voterIdFields = [
     'voterID', 'voter_id', 'voterId', 'votersId', 'voters_id',
     'voterIdPicture', 'voter_id_picture', 'voterIdImage', 'voter_id_image'
   ];
-
+  
   const nationalIdFields = [
-    'nationalID', 'national_id', 'nationalId', 'nationalIdPicture',
+    'nationalID', 'national_id', 'nationalId', 'nationalIdPicture', 
     'national_id_picture', 'nationalIdImage', 'national_id_image',
     'philId', 'phil_id', 'philsysId', 'philsys_id'
   ];
 
-  const genericIdFields = ['idPicture', 'id_picture', 'idImage', 'id_image', 'validId', 'valid_id'];
-
-  const allFields = [...voterIdFields, ...nationalIdFields, ...genericIdFields];
-
-  for (const field of allFields) {
+  // Check for any voter ID fields
+  for (const field of voterIdFields) {
     if (data[field] && data[field] !== '' && data[field] !== null) {
-      return true;
+      // Only count if it's a URL (not just a filename)
+      if (typeof data[field] === 'string' && data[field].startsWith('http')) {
+        return true;
+      }
     }
+  }
+
+  // Check for any national ID fields
+  for (const field of nationalIdFields) {
+    if (data[field] && data[field] !== '' && data[field] !== null) {
+      // Only count if it's a URL (not just a filename)
+      if (typeof data[field] === 'string' && data[field].startsWith('http')) {
+        return true;
+      }
+    }
+  }
+
+  // Check isRegisteredVoter flag as fallback
+  if (data.isRegisteredVoter === true) {
+    return true;
   }
 
   return false;
@@ -147,37 +182,73 @@ const Residents: React.FC = () => {
 
   // ---- Sort ----
   const sortResidents = (list: Resident[], sortOption: SortOption): Resident[] => {
-    const sorted = [...list];
+  const sorted = [...list];
 
-    switch (sortOption) {
-      case 'name-asc':
-        return sorted.sort((a, b) => {
-          const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
-          const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
-          return nameA.localeCompare(nameB);
-        });
-      case 'name-desc':
-        return sorted.sort((a, b) => {
-          const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
-          const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
-          return nameB.localeCompare(nameA);
-        });
-      case 'date-newest':
-        return sorted.sort((a, b) => {
-          const dateA = a.dateAdded ? (a.dateAdded.toDate ? a.dateAdded.toDate() : new Date(a.dateAdded)) : new Date(0);
-          const dateB = b.dateAdded ? (b.dateAdded.toDate ? b.dateAdded.toDate() : new Date(b.dateAdded)) : new Date(0);
-          return dateB.getTime() - dateA.getTime();
-        });
-      case 'date-oldest':
-        return sorted.sort((a, b) => {
-          const dateA = a.dateAdded ? (a.dateAdded.toDate ? a.dateAdded.toDate() : new Date(a.dateAdded)) : new Date(0);
-          const dateB = b.dateAdded ? (b.dateAdded.toDate ? b.dateAdded.toDate() : new Date(b.dateAdded)) : new Date(0);
-          return dateA.getTime() - dateB.getTime();
-        });
-      default:
-        return sorted;
-    }
-  };
+  switch (sortOption) {
+    case 'name-asc':
+      return sorted.sort((a, b) => {
+        const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+        const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+    
+    case 'name-desc':
+      return sorted.sort((a, b) => {
+        const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+        const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+        return nameB.localeCompare(nameA);
+      });
+    
+    case 'date-newest':
+      return sorted.sort((a, b) => {
+        // Get date from either createdAt or dateAdded field
+        const getDate = (resident: Resident) => {
+          const dateField = resident.createdAt || resident.dateAdded;
+          if (!dateField) return new Date(0); // Put residents without date at the end
+          
+          // Handle Firestore Timestamp
+          if (dateField.toDate) {
+            return dateField.toDate();
+          }
+          
+          // Handle ISO string or regular Date
+          return new Date(dateField);
+        };
+
+        const dateA = getDate(a);
+        const dateB = getDate(b);
+        
+        // Newest first (descending order)
+        return dateB.getTime() - dateA.getTime();
+      });
+    
+    case 'date-oldest':
+      return sorted.sort((a, b) => {
+        // Get date from either createdAt or dateAdded field
+        const getDate = (resident: Resident) => {
+          const dateField = resident.createdAt || resident.dateAdded;
+          if (!dateField) return new Date(); // Put residents without date at the end
+          
+          // Handle Firestore Timestamp
+          if (dateField.toDate) {
+            return dateField.toDate();
+          }
+          
+          // Handle ISO string or regular Date
+          return new Date(dateField);
+        };
+
+        const dateA = getDate(a);
+        const dateB = getDate(b);
+        
+        // Oldest first (ascending order)
+        return dateA.getTime() - dateB.getTime();
+      });
+    
+    default:
+      return sorted;
+  }
+};
 
   // ---- Filter by active dashboard filter ----
   const applyDashboardFilter = (list: Resident[]): Resident[] => {

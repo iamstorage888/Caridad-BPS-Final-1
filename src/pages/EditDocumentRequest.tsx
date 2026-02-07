@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
 import { db } from '../Database/firebase';
-import { collection, addDoc, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 
 const EditDocumentRequest: React.FC = () => {
   const navigate = useNavigate();
@@ -12,12 +12,25 @@ const EditDocumentRequest: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [isForNonResident, setIsForNonResident] = useState(false);
 
   const [form, setForm] = useState({
     fullName: '',
     documentType: '',
     purpose: '',
     status: 'Pending',
+  });
+
+  // Additional form state for dry docking certificate (non-residents)
+  const [dryDockingForm, setDryDockingForm] = useState({
+    fullName: '',
+    boatNumber: '',
+    address: '',
+  });
+
+  // Form state for dry docking certificate (barangay residents)
+  const [residentDryDockingForm, setResidentDryDockingForm] = useState({
+    boatNumber: '',
   });
 
   const documentTypes = [
@@ -54,12 +67,33 @@ const EditDocumentRequest: React.FC = () => {
           
           if (docSnap.exists()) {
             const data = docSnap.data();
+            
+            // Set basic form data
             setForm({
               fullName: data.fullName || '',
               documentType: data.documentType || '',
               purpose: data.purpose || '',
               status: data.status || 'Pending',
             });
+
+            // Check if this is a dry docking certificate and load its specific data
+            if (data.documentType === 'Certificate Dry Docking' && data.dryDockingDetails) {
+              const details = data.dryDockingDetails;
+              
+              if (details.isNonResident) {
+                setIsForNonResident(true);
+                setDryDockingForm({
+                  fullName: data.fullName || '',
+                  boatNumber: details.boatNumber || '',
+                  address: details.address || '',
+                });
+              } else {
+                setIsForNonResident(false);
+                setResidentDryDockingForm({
+                  boatNumber: details.boatNumber || '',
+                });
+              }
+            }
           } else {
             alert('Document request not found');
             navigate('/documents');
@@ -79,9 +113,35 @@ const EditDocumentRequest: React.FC = () => {
   const validateForm = () => {
     const newErrors: { [key: string]: string } = {};
 
-    if (!form.fullName.trim()) {
-      newErrors.fullName = 'Please select a resident';
+    // For dry docking certificates, validation depends on whether it's for a resident or non-resident
+    if (form.documentType === 'Certificate Dry Docking') {
+      if (isForNonResident) {
+        // Non-resident validation
+        if (!dryDockingForm.fullName.trim()) {
+          newErrors.dryDockingFullName = 'Please enter full name';
+        }
+        if (!dryDockingForm.boatNumber.trim()) {
+          newErrors.boatNumber = 'Please enter boat number';
+        }
+        if (!dryDockingForm.address.trim()) {
+          newErrors.address = 'Please enter address';
+        }
+      } else {
+        // Resident validation
+        if (!form.fullName.trim()) {
+          newErrors.fullName = 'Please select a resident';
+        }
+        if (!residentDryDockingForm.boatNumber.trim()) {
+          newErrors.boatNumber = 'Please enter boat number';
+        }
+      }
+    } else {
+      // For all other document types, require resident selection
+      if (!form.fullName.trim()) {
+        newErrors.fullName = 'Please select a resident';
+      }
     }
+
     if (!form.documentType.trim()) {
       newErrors.documentType = 'Please select a document type';
     }
@@ -108,6 +168,60 @@ const EditDocumentRequest: React.FC = () => {
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
+
+    // Reset dry docking forms when document type changes
+    if (name === 'documentType') {
+      if (value !== 'Certificate Dry Docking') {
+        setDryDockingForm({
+          fullName: '',
+          boatNumber: '',
+          address: '',
+        });
+        setResidentDryDockingForm({
+          boatNumber: '',
+        });
+        setIsForNonResident(false);
+      }
+    }
+  };
+
+  const handleResidentDryDockingChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setResidentDryDockingForm(prev => ({ ...prev, [name]: value }));
+    
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const handleDryDockingChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setDryDockingForm(prev => ({ ...prev, [name]: value }));
+    
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const handleNonResidentToggle = () => {
+    setIsForNonResident(!isForNonResident);
+    // Clear form data when switching
+    setForm(prev => ({ ...prev, fullName: '' }));
+    setDryDockingForm({
+      fullName: '',
+      boatNumber: '',
+      address: '',
+    });
+    setResidentDryDockingForm({
+      boatNumber: '',
+    });
+    setErrors({});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -122,10 +236,33 @@ const EditDocumentRequest: React.FC = () => {
     try {
       if (id) {
         const docRef = doc(db, 'documentRequests', id);
-        await updateDoc(docRef, {
+        
+        const updateData: any = {
           ...form,
           updatedAt: new Date(),
-        });
+        };
+
+        // Add dry docking specific data if applicable
+        if (form.documentType === 'Certificate Dry Docking') {
+          if (isForNonResident) {
+            updateData.fullName = dryDockingForm.fullName;
+            updateData.dryDockingDetails = {
+              isNonResident: true,
+              boatNumber: dryDockingForm.boatNumber,
+              address: dryDockingForm.address,
+            };
+          } else {
+            updateData.dryDockingDetails = {
+              isNonResident: false,
+              boatNumber: residentDryDockingForm.boatNumber,
+            };
+          }
+        } else {
+          // Remove dry docking details if document type changed from dry docking
+          updateData.dryDockingDetails = null;
+        }
+
+        await updateDoc(docRef, updateData);
         
         alert('Document request updated successfully!');
         navigate(`/documents/view/${id}`);
@@ -186,35 +323,7 @@ const EditDocumentRequest: React.FC = () => {
 
           <div style={styles.formContainer}>
             <form onSubmit={handleSubmit} style={styles.form}>
-              {/* Full Name Field */}
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>
-                  <span style={styles.labelIcon}>👤</span>
-                  Resident Name
-                </label>
-                <select
-                  name="fullName"
-                  value={form.fullName}
-                  onChange={handleChange}
-                  required
-                  style={{
-                    ...styles.input,
-                    ...(errors.fullName ? styles.inputError : {})
-                  }}
-                >
-                  <option value="">Select Resident</option>
-                  {residents.map((name, index) => (
-                    <option key={index} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-                {errors.fullName && (
-                  <span style={styles.errorText}>{errors.fullName}</span>
-                )}
-              </div>
-
-              {/* Document Type Field */}
+              {/* Document Type Field - Show first */}
               <div style={styles.fieldGroup}>
                 <label style={styles.label}>
                   <span style={styles.labelIcon}>📋</span>
@@ -241,6 +350,162 @@ const EditDocumentRequest: React.FC = () => {
                   <span style={styles.errorText}>{errors.documentType}</span>
                 )}
               </div>
+
+              {/* Toggle for Dry Docking Certificate */}
+              {form.documentType === 'Certificate Dry Docking' && (
+                <div style={styles.fieldGroup}>
+                  <div style={styles.toggleContainer}>
+                    <label style={styles.toggleLabel}>
+                      <input
+                        type="checkbox"
+                        checked={isForNonResident}
+                        onChange={handleNonResidentToggle}
+                        style={styles.checkbox}
+                      />
+                      <span style={styles.checkboxLabel}>
+                        This is for a non-resident (not from this barangay)
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Conditional Full Name Field */}
+              {form.documentType !== 'Certificate Dry Docking' || !isForNonResident ? (
+                <div style={styles.fieldGroup}>
+                  <label style={styles.label}>
+                    <span style={styles.labelIcon}>👤</span>
+                    Resident Name
+                  </label>
+                  <select
+                    name="fullName"
+                    value={form.fullName}
+                    onChange={handleChange}
+                    required
+                    style={{
+                      ...styles.input,
+                      ...(errors.fullName ? styles.inputError : {})
+                    }}
+                  >
+                    <option value="">Select Resident</option>
+                    {residents.map((name, index) => (
+                      <option key={index} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.fullName && (
+                    <span style={styles.errorText}>{errors.fullName}</span>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Conditional Dry Docking Forms */}
+              {form.documentType === 'Certificate Dry Docking' && (
+                <>
+                  {!isForNonResident ? (
+                    /* Form for Barangay Residents */
+                    <div style={styles.conditionalFormContainer}>
+                      <div style={styles.conditionalFormHeader}>
+                        <span style={styles.conditionalFormIcon}>🏠</span>
+                        <h3 style={styles.conditionalFormTitle}>Barangay Resident Details</h3>
+                      </div>
+                      
+                      <div style={styles.fieldGroup}>
+                        <label style={styles.label}>
+                          <span style={styles.labelIcon}>🚢</span>
+                          Boat Number
+                        </label>
+                        <input
+                          type="text"
+                          name="boatNumber"
+                          value={residentDryDockingForm.boatNumber}
+                          onChange={handleResidentDryDockingChange}
+                          placeholder="Enter boat number"
+                          style={{
+                            ...styles.input,
+                            ...(errors.boatNumber ? styles.inputError : {})
+                          }}
+                        />
+                        {errors.boatNumber && (
+                          <span style={styles.errorText}>{errors.boatNumber}</span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Form for Non-Residents */
+                    <div style={styles.conditionalFormContainer}>
+                      <div style={styles.conditionalFormHeader}>
+                        <span style={styles.conditionalFormIcon}>⚓</span>
+                        <h3 style={styles.conditionalFormTitle}>Non-Resident Details</h3>
+                      </div>
+                      
+                      <div style={styles.fieldGroup}>
+                        <label style={styles.label}>
+                          <span style={styles.labelIcon}>👤</span>
+                          Full Name
+                        </label>
+                        <input
+                          type="text"
+                          name="fullName"
+                          value={dryDockingForm.fullName}
+                          onChange={handleDryDockingChange}
+                          placeholder="Enter full name"
+                          style={{
+                            ...styles.input,
+                            ...(errors.dryDockingFullName ? styles.inputError : {})
+                          }}
+                        />
+                        {errors.dryDockingFullName && (
+                          <span style={styles.errorText}>{errors.dryDockingFullName}</span>
+                        )}
+                      </div>
+
+                      <div style={styles.fieldGroup}>
+                        <label style={styles.label}>
+                          <span style={styles.labelIcon}>🚢</span>
+                          Boat Number
+                        </label>
+                        <input
+                          type="text"
+                          name="boatNumber"
+                          value={dryDockingForm.boatNumber}
+                          onChange={handleDryDockingChange}
+                          placeholder="Enter boat number"
+                          style={{
+                            ...styles.input,
+                            ...(errors.boatNumber ? styles.inputError : {})
+                          }}
+                        />
+                        {errors.boatNumber && (
+                          <span style={styles.errorText}>{errors.boatNumber}</span>
+                        )}
+                      </div>
+
+                      <div style={styles.fieldGroup}>
+                        <label style={styles.label}>
+                          <span style={styles.labelIcon}>📍</span>
+                          Address
+                        </label>
+                        <input
+                          type="text"
+                          name="address"
+                          value={dryDockingForm.address}
+                          onChange={handleDryDockingChange}
+                          placeholder="Enter complete address"
+                          style={{
+                            ...styles.input,
+                            ...(errors.address ? styles.inputError : {})
+                          }}
+                        />
+                        {errors.address && (
+                          <span style={styles.errorText}>{errors.address}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
 
               {/* Status Field */}
               <div style={styles.fieldGroup}>
@@ -486,6 +751,51 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '12px',
     marginTop: '4px',
     display: 'block',
+  },
+  toggleContainer: {
+    backgroundColor: '#f9f9f9',
+    border: '1px solid #e0e0e0',
+    borderRadius: '4px',
+    padding: '1rem',
+  },
+  toggleLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    cursor: 'pointer',
+  },
+  checkbox: {
+    width: '18px',
+    height: '18px',
+    cursor: 'pointer',
+  },
+  checkboxLabel: {
+    fontSize: '1rem',
+    color: '#333',
+  },
+  conditionalFormContainer: {
+    backgroundColor: '#f8fafc',
+    border: '2px solid #e2e8f0',
+    borderRadius: '12px',
+    padding: '25px',
+    marginBottom: '25px',
+  },
+  conditionalFormHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    marginBottom: '20px',
+    paddingBottom: '15px',
+    borderBottom: '1px solid #e2e8f0',
+  },
+  conditionalFormIcon: {
+    fontSize: '24px',
+    marginRight: '12px',
+  },
+  conditionalFormTitle: {
+    margin: 0,
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#374151',
   },
   buttonGroup: {
     display: 'flex',

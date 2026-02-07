@@ -34,54 +34,85 @@ const ResidentView: React.FC = () => {
   const [voterIdUrl, setVoterIdUrl] = useState<string | null>(null);
   const [nationalIdUrl, setNationalIdUrl] = useState<string | null>(null);
 
-  // Helper function to find voter ID from various possible field names
-  const findVoterIdUrl = (data: any): string | null => {
-    // First check for URL fields (Supabase URLs) - PRIORITY
-    if (data.votersIdUrl && typeof data.votersIdUrl === 'string' && data.votersIdUrl.startsWith('http')) {
-      return data.votersIdUrl;
+// Helper function to check if resident has any National ID photos
+const hasNationalId = (data: any): boolean => {
+  // Check for new format (front/back URLs)
+  if (data.nationalIdFrontUrl || data.nationalIdBackUrl) {
+    return true;
+  }
+  
+  // Check for old format (single URL)
+  if (data.nationalIdUrl && typeof data.nationalIdUrl === 'string' && data.nationalIdUrl.startsWith('http')) {
+    return true;
+  }
+  
+  // Check for legacy field names
+  const legacyFields = ['nationalID', 'national_id', 'nationalId'];
+  for (const field of legacyFields) {
+    if (data[field] && typeof data[field] === 'string' && data[field].startsWith('http')) {
+      return true;
     }
-    
-    // Fallback to old field names for backwards compatibility
-    const voterIdFields = [
-      'voterID', 'voter_id', 'voterId', 'votersId', 'voters_id',
-      'voterIdPicture', 'voter_id_picture', 'voterIdImage', 'voter_id_image'
-    ];
-    
-    for (const field of voterIdFields) {
-      if (data[field] && typeof data[field] === 'string' && data[field].trim() !== '') {
-        // Check if it's a URL (starts with http)
-        if (data[field].startsWith('http')) {
-          return data[field];
-        }
-      }
-    }
-    return null;
-  };
+  }
+  
+  return false;
+};
 
-  // Helper function to find national ID from various possible field names
-  const findNationalIdUrl = (data: any): string | null => {
-    // First check for URL fields (Supabase URLs) - PRIORITY
-    if (data.nationalIdUrl && typeof data.nationalIdUrl === 'string' && data.nationalIdUrl.startsWith('http')) {
-      return data.nationalIdUrl;
+// Helper function to check if resident has any Voter's ID photos
+const hasVotersId = (data: any): boolean => {
+  // Check for new format (front/back URLs)
+  if (data.votersIdFrontUrl || data.votersIdBackUrl) {
+    return true;
+  }
+  
+  // Check for old format (single URL)
+  if (data.votersIdUrl && typeof data.votersIdUrl === 'string' && data.votersIdUrl.startsWith('http')) {
+    return true;
+  }
+  
+  // Check for legacy field names
+  const legacyFields = ['voterID', 'voter_id', 'voterId', 'votersId'];
+  for (const field of legacyFields) {
+    if (data[field] && typeof data[field] === 'string' && data[field].startsWith('http')) {
+      return true;
     }
-    
-    // Fallback to old field names for backwards compatibility
-    const nationalIdFields = [
-      'nationalID', 'national_id', 'nationalId', 'nationalIdPicture',
-      'national_id_picture', 'nationalIdImage', 'national_id_image',
-      'philId', 'phil_id', 'philsysId', 'philsys_id'
-    ];
-    
-    for (const field of nationalIdFields) {
-      if (data[field] && typeof data[field] === 'string' && data[field].trim() !== '') {
-        // Check if it's a URL (starts with http)
-        if (data[field].startsWith('http')) {
-          return data[field];
-        }
-      }
+  }
+  
+  return false;
+};
+
+// Helper function to find Voter's ID URL
+const findVoterIdUrl = (data: any): string | null => {
+  if (data.votersIdFrontUrl && typeof data.votersIdFrontUrl === 'string' && data.votersIdFrontUrl.startsWith('http')) {
+    return data.votersIdFrontUrl;
+  }
+  if (data.votersIdUrl && typeof data.votersIdUrl === 'string' && data.votersIdUrl.startsWith('http')) {
+    return data.votersIdUrl;
+  }
+  const legacyFields = ['voterID', 'voter_id', 'voterId', 'votersId'];
+  for (const field of legacyFields) {
+    if (data[field] && typeof data[field] === 'string' && data[field].startsWith('http')) {
+      return data[field];
     }
-    return null;
-  };
+  }
+  return null;
+};
+
+// Helper function to find National ID URL
+const findNationalIdUrl = (data: any): string | null => {
+  if (data.nationalIdFrontUrl && typeof data.nationalIdFrontUrl === 'string' && data.nationalIdFrontUrl.startsWith('http')) {
+    return data.nationalIdFrontUrl;
+  }
+  if (data.nationalIdUrl && typeof data.nationalIdUrl === 'string' && data.nationalIdUrl.startsWith('http')) {
+    return data.nationalIdUrl;
+  }
+  const legacyFields = ['nationalID', 'national_id', 'nationalId'];
+  for (const field of legacyFields) {
+    if (data[field] && typeof data[field] === 'string' && data[field].startsWith('http')) {
+      return data[field];
+    }
+  }
+  return null;
+};
 
   const fetchResident = async () => {
     if (!id) {
@@ -283,73 +314,200 @@ const ResidentView: React.FC = () => {
             </div>
           </div>
 
-          {/* ID Images Card (only show if at least one ID exists) */}
-          {hasAnyId && (
-            <div style={styles.idImagesCard}>
-              <h3 style={styles.cardTitle}>📋 Identification Documents</h3>
-              <div style={styles.idImagesGrid}>
-                {voterIdUrl && (
-                  <div style={styles.idImageContainer}>
-                    <div style={styles.idImageHeader}>
-                      <span style={styles.idImageTitle}>🗳️ Voter's ID</span>
-                      <a
-                        href={voterIdUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={styles.viewFullButton}
-                      >
-                        🔍 View Full Size
-                      </a>
-                    </div>
-                    <div style={styles.idImageWrapper}>
-                      <img
-                        src={voterIdUrl}
-                        alt="Voter's ID"
-                        style={styles.idImage}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                          const parent = (e.target as HTMLImageElement).parentElement;
-                          if (parent) {
-                            parent.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Failed to load image</div>';
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
+          {/* ID Images Card - UPDATED VERSION */}
+{hasAnyId && (
+  <div style={styles.idImagesCard}>
+    <h3 style={styles.cardTitle}>📋 Identification Documents</h3>
+    <div style={styles.idImagesGrid}>
+      
+      {/* National ID - Front */}
+      {resident.nationalIdFrontUrl && (
+        <div style={styles.idImageContainer}>
+          <div style={styles.idImageHeader}>
+            <span style={styles.idImageTitle}>🆔 National ID (Front)</span>
+            <a
+              href={resident.nationalIdFrontUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.viewFullButton}
+            >
+              🔍 View Full Size
+            </a>
+          </div>
+          <div style={styles.idImageWrapper}>
+            <img
+              src={resident.nationalIdFrontUrl}
+              alt="National ID Front"
+              style={styles.idImage}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                const parent = (e.target as HTMLImageElement).parentElement;
+                if (parent) {
+                  parent.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Failed to load image</div>';
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
 
-                {nationalIdUrl && (
-                  <div style={styles.idImageContainer}>
-                    <div style={styles.idImageHeader}>
-                      <span style={styles.idImageTitle}>🆔 National ID</span>
-                      <a
-                        href={nationalIdUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={styles.viewFullButton}
-                      >
-                        🔍 View Full Size
-                      </a>
-                    </div>
-                    <div style={styles.idImageWrapper}>
-                      <img
-                        src={nationalIdUrl}
-                        alt="National ID"
-                        style={styles.idImage}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                          const parent = (e.target as HTMLImageElement).parentElement;
-                          if (parent) {
-                            parent.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Failed to load image</div>';
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+      {/* National ID - Back */}
+      {resident.nationalIdBackUrl && (
+        <div style={styles.idImageContainer}>
+          <div style={styles.idImageHeader}>
+            <span style={styles.idImageTitle}>🆔 National ID (Back)</span>
+            <a
+              href={resident.nationalIdBackUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.viewFullButton}
+            >
+              🔍 View Full Size
+            </a>
+          </div>
+          <div style={styles.idImageWrapper}>
+            <img
+              src={resident.nationalIdBackUrl}
+              alt="National ID Back"
+              style={styles.idImage}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                const parent = (e.target as HTMLImageElement).parentElement;
+                if (parent) {
+                  parent.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Failed to load image</div>';
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Voter's ID - Front */}
+      {resident.votersIdFrontUrl && (
+        <div style={styles.idImageContainer}>
+          <div style={styles.idImageHeader}>
+            <span style={styles.idImageTitle}>🗳️ Voter's ID (Front)</span>
+            <a
+              href={resident.votersIdFrontUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.viewFullButton}
+            >
+              🔍 View Full Size
+            </a>
+          </div>
+          <div style={styles.idImageWrapper}>
+            <img
+              src={resident.votersIdFrontUrl}
+              alt="Voter's ID Front"
+              style={styles.idImage}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                const parent = (e.target as HTMLImageElement).parentElement;
+                if (parent) {
+                  parent.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Failed to load image</div>';
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Voter's ID - Back */}
+      {resident.votersIdBackUrl && (
+        <div style={styles.idImageContainer}>
+          <div style={styles.idImageHeader}>
+            <span style={styles.idImageTitle}>🗳️ Voter's ID (Back)</span>
+            <a
+              href={resident.votersIdBackUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.viewFullButton}
+            >
+              🔍 View Full Size
+            </a>
+          </div>
+          <div style={styles.idImageWrapper}>
+            <img
+              src={resident.votersIdBackUrl}
+              alt="Voter's ID Back"
+              style={styles.idImage}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                const parent = (e.target as HTMLImageElement).parentElement;
+                if (parent) {
+                  parent.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Failed to load image</div>';
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Legacy single photo support */}
+      {resident.nationalIdUrl && !resident.nationalIdFrontUrl && !resident.nationalIdBackUrl && (
+        <div style={styles.idImageContainer}>
+          <div style={styles.idImageHeader}>
+            <span style={styles.idImageTitle}>🆔 National ID</span>
+            <a
+              href={resident.nationalIdUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.viewFullButton}
+            >
+              🔍 View Full Size
+            </a>
+          </div>
+          <div style={styles.idImageWrapper}>
+            <img
+              src={resident.nationalIdUrl}
+              alt="National ID"
+              style={styles.idImage}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                const parent = (e.target as HTMLImageElement).parentElement;
+                if (parent) {
+                  parent.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Failed to load image</div>';
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {resident.votersIdUrl && !resident.votersIdFrontUrl && !resident.votersIdBackUrl && (
+        <div style={styles.idImageContainer}>
+          <div style={styles.idImageHeader}>
+            <span style={styles.idImageTitle}>🗳️ Voter's ID</span>
+            <a
+              href={resident.votersIdUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.viewFullButton}
+            >
+              🔍 View Full Size
+            </a>
+          </div>
+          <div style={styles.idImageWrapper}>
+            <img
+              src={resident.votersIdUrl}
+              alt="Voter's ID"
+              style={styles.idImage}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                const parent = (e.target as HTMLImageElement).parentElement;
+                if (parent) {
+                  parent.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Failed to load image</div>';
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
+      
+    </div>
+  </div>
+)}
 
           {/* Details Grid */}
           <div style={styles.detailsGrid}>

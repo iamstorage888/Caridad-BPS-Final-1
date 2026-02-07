@@ -2,10 +2,10 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
 import { db } from '../Database/firebase';
-import { collection, addDoc, getDocs } from 'firebase/firestore';
-import { useNavigate } from 'react-router-dom';
+import { collection, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { useNavigate, useParams } from 'react-router-dom';
 
-interface AddBlotter {
+interface BlotterData {
   id?: string;
   complainant: string;
   respondent: string;
@@ -13,6 +13,8 @@ interface AddBlotter {
   incidentDate: string;
   location: string;
   details: string;
+  status?: string;
+  createdAt?: string;
 }
 
 interface Resident {
@@ -73,6 +75,13 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Initialize search term with value
+  useEffect(() => {
+    if (value && !searchTerm) {
+      setSearchTerm(value);
+    }
+  }, [value]);
 
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,8 +193,11 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
   );
 };
 
-const AddBlotter: React.FC = () => {
-  const [formData, setFormData] = useState<AddBlotter>({
+const EditBlotter: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  const [formData, setFormData] = useState<BlotterData>({
     complainant: '',
     respondent: '',
     incidentType: '',
@@ -200,8 +212,7 @@ const AddBlotter: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
-
-  const navigate = useNavigate();
+  const [notFound, setNotFound] = useState(false);
 
   const puroks = [
     'Purok 1',
@@ -228,9 +239,6 @@ const AddBlotter: React.FC = () => {
   // Fetch residents with error handling
   const fetchResidents = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-      
       const querySnapshot = await getDocs(collection(db, 'residents'));
       const fetchedResidents: Resident[] = querySnapshot.docs.map(doc => {
         const data = doc.data();
@@ -248,14 +256,52 @@ const AddBlotter: React.FC = () => {
     } catch (err) {
       console.error('Error fetching residents:', err);
       setError('Failed to load residents. Please try again.');
-    } finally {
-      setLoading(false);
     }
   }, []);
 
+  // Fetch blotter data
+  const fetchBlotterData = useCallback(async () => {
+    if (!id) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const docRef = doc(db, 'blotters', id);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setFormData({
+          id: docSnap.id,
+          complainant: data.complainant || '',
+          respondent: data.respondent || '',
+          incidentType: data.incidentType || '',
+          incidentDate: data.incidentDate || '',
+          location: data.location || '',
+          details: data.details || '',
+          status: data.status || 'filed',
+          createdAt: data.createdAt || '',
+        });
+      } else {
+        setNotFound(true);
+      }
+    } catch (err) {
+      console.error('Error fetching blotter:', err);
+      setError('Failed to load blotter report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
     fetchResidents();
-  }, [fetchResidents]);
+    fetchBlotterData();
+  }, [fetchResidents, fetchBlotterData]);
 
   const validateForm = (): boolean => {
     const newErrors: {[key: string]: string} = {};
@@ -317,18 +363,28 @@ const AddBlotter: React.FC = () => {
       return;
     }
 
+    if (!id) {
+      setError('Invalid blotter ID');
+      return;
+    }
+
     try {
       setSubmitting(true);
       setError(null);
       
-      // Add timestamp for creation
-      const blotterData = {
-        ...formData,
-        createdAt: new Date().toISOString(),
-        status: 'filed' // Default status
+      // Update blotter data (preserve original createdAt and status)
+      const updateData = {
+        complainant: formData.complainant,
+        respondent: formData.respondent,
+        incidentType: formData.incidentType,
+        incidentDate: formData.incidentDate,
+        location: formData.location,
+        details: formData.details,
+        updatedAt: new Date().toISOString(),
       };
       
-      await addDoc(collection(db, 'blotters'), blotterData);
+      const docRef = doc(db, 'blotters', id);
+      await updateDoc(docRef, updateData);
       
       setSuccess(true);
       setTimeout(() => {
@@ -336,13 +392,53 @@ const AddBlotter: React.FC = () => {
       }, 2000);
       
     } catch (error: any) {
-      console.error('Error submitting blotter:', error);
-      setError('Failed to submit blotter report. Please try again.');
+      console.error('Error updating blotter:', error);
+      setError('Failed to update blotter report. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div style={styles.container}>
+        <Sidebar />
+        <div style={styles.mainContent}>
+          <div style={styles.loadingContainer}>
+            <div style={styles.spinner}></div>
+            <p style={styles.loadingText}>Loading blotter report...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Not found state
+  if (notFound) {
+    return (
+      <div style={styles.container}>
+        <Sidebar />
+        <div style={styles.mainContent}>
+          <div style={styles.notFoundContainer}>
+            <div style={styles.notFoundIcon}>⚠️</div>
+            <h2 style={styles.notFoundTitle}>Report Not Found</h2>
+            <p style={styles.notFoundMessage}>
+              The blotter report you're looking for doesn't exist or has been deleted.
+            </p>
+            <button 
+              onClick={() => navigate('/blotter')}
+              style={styles.backToListButton}
+            >
+              ← Back to Reports
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Success state
   if (success) {
     return (
       <div style={styles.container}>
@@ -350,9 +446,9 @@ const AddBlotter: React.FC = () => {
         <div style={styles.mainContent}>
           <div style={styles.successContainer}>
             <div style={styles.successIcon}>✓</div>
-            <h2 style={styles.successTitle}>Report Submitted Successfully!</h2>
+            <h2 style={styles.successTitle}>Report Updated Successfully!</h2>
             <p style={styles.successMessage}>
-              Your blotter report has been saved and is now filed for review.
+              Your changes have been saved to the blotter report.
             </p>
             <p style={styles.redirectMessage}>
               Redirecting to reports page...
@@ -376,9 +472,9 @@ const AddBlotter: React.FC = () => {
             >
               ← Back to Reports
             </button>
-            <h1 style={styles.title}>Add Blotter Report</h1>
+            <h1 style={styles.title}>Edit Blotter Report</h1>
             <p style={styles.subtitle}>
-              Fill out the form below to create a new blotter report
+              Update the information for this blotter report
             </p>
           </div>
           <div style={styles.headerRight}>
@@ -562,11 +658,11 @@ const AddBlotter: React.FC = () => {
                 {submitting ? (
                   <>
                     <span style={styles.spinner}></span>
-                    Submitting...
+                    Updating...
                   </>
                 ) : (
                   <>
-                    💾 Submit Report
+                    💾 Update Report
                   </>
                 )}
               </button>
@@ -651,6 +747,61 @@ const styles = {
     cursor: 'pointer',
     color: '#721c24',
     padding: '0 4px',
+  },
+  loadingContainer: {
+    textAlign: 'center',
+    padding: '64px 24px',
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    border: '1px solid #e9ecef',
+    marginTop: '64px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+  } as React.CSSProperties,
+  loadingText: {
+    marginTop: '16px',
+    fontSize: '16px',
+    color: '#6c757d',
+  },
+  notFoundContainer: {
+    textAlign: 'center',
+    padding: '64px 24px',
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    border: '1px solid #e9ecef',
+    marginTop: '64px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+  } as React.CSSProperties,
+  notFoundIcon: {
+    fontSize: '64px',
+    color: '#ffc107',
+    marginBottom: '16px',
+    display: 'block',
+  },
+  notFoundTitle: {
+    fontSize: '24px',
+    fontWeight: '600',
+    color: '#212529',
+    margin: '16px 0 8px 0',
+  },
+  notFoundMessage: {
+    fontSize: '16px',
+    color: '#6c757d',
+    marginBottom: '24px',
+    lineHeight: '1.5',
+  },
+  backToListButton: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 24px',
+    backgroundColor: '#007bff',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
   },
   successContainer: {
     textAlign: 'center',
@@ -970,4 +1121,4 @@ styleSheet.textContent = `
 `;
 document.head.appendChild(styleSheet);
 
-export default AddBlotter;
+export default EditBlotter;

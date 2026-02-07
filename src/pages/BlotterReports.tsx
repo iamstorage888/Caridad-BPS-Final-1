@@ -354,6 +354,18 @@ const BlotterReports: React.FC = () => {
                             <p style={styles.detailDescription}>{b.details}</p>
                           </div>
                         </div>
+                        
+                        {/* Action Buttons */}
+                        <div style={styles.actionButtonsContainer}>
+                          <button 
+                            onClick={() => navigate(`/edit-blotter/${b.id}`)}
+                            style={styles.editButton}
+                            className="edit-button"
+                          >
+                            <span style={styles.buttonIcon}>✏️</span>
+                            Edit Report
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -686,6 +698,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '6px',
     border: '1px solid #e9ecef'
   },
+  actionButtonsContainer: {
+    padding: '16px 20px',
+    borderTop: '1px solid #e9ecef',
+    backgroundColor: '#fafafa',
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '12px'
+  },
+  editButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 20px',
+    backgroundColor: '#007bff',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 4px rgba(0, 123, 255, 0.3)'
+  },
   emptyState: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -748,6 +783,12 @@ styleSheet.textContent = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+  }
+  
+  .edit-button:hover {
+    background-color: #0056b3 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4) !important;
   }
 `;
 document.head.appendChild(styleSheet);

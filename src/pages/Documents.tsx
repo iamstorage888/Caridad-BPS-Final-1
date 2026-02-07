@@ -19,6 +19,9 @@ interface DocumentRequest {
   };
 }
 
+type SortField = 'date' | 'name' | 'documentType' | 'status';
+type SortOrder = 'asc' | 'desc';
+
 const Documents: React.FC = () => {
   const navigate = useNavigate();
   const [requests, setRequests] = useState<DocumentRequest[]>([]);
@@ -26,6 +29,9 @@ const Documents: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'nonResident'>('all');
+  const [sortField, setSortField] = useState<SortField>('date');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchRequests = async () => {
     try {
@@ -130,6 +136,12 @@ const Documents: React.FC = () => {
 
   const getDocumentIcon = (type: string) => {
     const map: { [key: string]: string } = {
+      'brgy clearance': '📋',
+      'brgy residency': '🏠',
+      'brgy permit': '📄',
+      'certificate of indigency': '💼',
+      'certificate dry docking': '⚓',
+      'certificate of attestation': '✅',
       'birth certificate': '👶',
       'marriage certificate': '💒',
       'death certificate': '⚰️',
@@ -137,24 +149,67 @@ const Documents: React.FC = () => {
       'id': '🆔',
       'clearance': '📋',
       'certificate': '📜',
-      'certificate dry docking': '⚓',
     };
     return map[type.toLowerCase()] || '📄';
   };
 
-  // --- Filtering ---
+  // --- Sorting function ---
+  const sortRequests = (requests: DocumentRequest[]) => {
+    return [...requests].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortField) {
+        case 'date':
+          comparison = a.createdAt.getTime() - b.createdAt.getTime();
+          break;
+        case 'name':
+          comparison = a.fullName.localeCompare(b.fullName);
+          break;
+        case 'documentType':
+          comparison = a.documentType.localeCompare(b.documentType);
+          break;
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  };
+
+  // --- Filtering and searching ---
   const getFilteredRequests = () => {
     let filtered = requests;
+    
+    // Tab filter
     if (activeTab === 'nonResident') {
       filtered = filtered.filter(req =>
         req.documentType === 'Certificate Dry Docking' &&
         req.dryDockingDetails?.isNonResident === true
       );
     }
+    
+    // Status filter
     if (filterStatus !== 'all') {
       filtered = filtered.filter(req => req.status.toLowerCase() === filterStatus);
     }
-    return filtered;
+    
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(req =>
+        req.fullName.toLowerCase().includes(query) ||
+        req.documentType.toLowerCase().includes(query) ||
+        req.purpose.toLowerCase().includes(query) ||
+        req.status.toLowerCase().includes(query) ||
+        (req.dryDockingDetails?.boatNumber?.toLowerCase().includes(query)) ||
+        (req.dryDockingDetails?.address?.toLowerCase().includes(query))
+      );
+    }
+    
+    return sortRequests(filtered);
   };
 
   const filteredRequests = getFilteredRequests();
@@ -162,6 +217,20 @@ const Documents: React.FC = () => {
     req.documentType === 'Certificate Dry Docking' &&
     req.dryDockingDetails?.isNonResident === true
   ).length;
+
+  const handleSortChange = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return '⇅';
+    return sortOrder === 'asc' ? '↑' : '↓';
+  };
 
   // --- Render ---
   return (
@@ -178,7 +247,7 @@ const Documents: React.FC = () => {
           <LogoutButton />
         </div>
 
-        {/* Stat cards — same grid as HomePage */}
+        {/* Stat cards */}
         <div style={styles.statsContainer}>
           {[
             { label: 'Total Requests',        value: requests.length,   icon: '📋', color: '#667eea' },
@@ -228,22 +297,71 @@ const Documents: React.FC = () => {
           })}
         </div>
 
-        {/* Toolbar: search-style filter + action button */}
+        {/* Toolbar: search, filter, sort, and action button */}
         <div style={styles.toolbar}>
-          <div style={styles.filterGroup}>
-            <label style={styles.filterLabel}>Filter by status:</label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              style={styles.filterSelect}
+          <div style={styles.toolbarLeft}>
+            {/* Search bar */}
+            <div style={styles.searchContainer}>
+              <span style={styles.searchIcon}>🔍</span>
+              <input
+                type="text"
+                placeholder="Search by name, document type, purpose..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={styles.searchInput}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  style={styles.clearSearchBtn}
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Status filter */}
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Status:</label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                style={styles.filterSelect}
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="in progress">In Progress</option>
+              </select>
+            </div>
+
+            {/* Sort options */}
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Sort by:</label>
+              <select
+                value={sortField}
+                onChange={(e) => setSortField(e.target.value as SortField)}
+                style={styles.filterSelect}
+              >
+                <option value="date">Date</option>
+                <option value="name">Requester Name</option>
+                <option value="documentType">Document Type</option>
+                <option value="status">Status</option>
+              </select>
+            </div>
+
+            {/* Sort order toggle */}
+            <button
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              style={styles.sortOrderBtn}
+              title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
             >
-              <option value="all">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-              <option value="in progress">In Progress</option>
-            </select>
+              {sortOrder === 'asc' ? '↑ Ascending' : '↓ Descending'}
+            </button>
           </div>
+
           <button style={styles.addButton} onClick={() => navigate('/documents/request')}>
             <span>➕</span> Request Document
           </button>
@@ -264,29 +382,34 @@ const Documents: React.FC = () => {
                   {filteredRequests.length} of {requests.length} requests
                   {activeTab === 'nonResident' && ' • Filtered: Non-Resident Dry Dock'}
                   {filterStatus !== 'all' && ` • Status: ${filterStatus}`}
+                  {searchQuery && ` • Search: "${searchQuery}"`}
                 </span>
               </div>
 
               {filteredRequests.length === 0 ? (
                 <div style={styles.emptyState}>
                   <span style={styles.emptyIcon}>
-                    {activeTab === 'nonResident' ? '⚓' : '📋'}
+                    {searchQuery ? '🔍' : activeTab === 'nonResident' ? '⚓' : '📋'}
                   </span>
                   <p style={styles.emptyTitle}>
-                    {activeTab === 'nonResident'
-                      ? 'No non-resident dry dock requests found'
-                      : filterStatus !== 'all'
-                        ? `No ${filterStatus} requests found`
-                        : 'No document requests yet'}
+                    {searchQuery
+                      ? 'No results found'
+                      : activeTab === 'nonResident'
+                        ? 'No non-resident dry dock requests found'
+                        : filterStatus !== 'all'
+                          ? `No ${filterStatus} requests found`
+                          : 'No document requests yet'}
                   </p>
                   <p style={styles.emptySubtitle}>
-                    {activeTab === 'nonResident'
-                      ? 'Non-resident dry dock certificate requests will appear here.'
-                      : filterStatus !== 'all'
-                        ? 'Try selecting a different status filter.'
-                        : 'Create your first document request to get started.'}
+                    {searchQuery
+                      ? 'Try adjusting your search terms or filters.'
+                      : activeTab === 'nonResident'
+                        ? 'Non-resident dry dock certificate requests will appear here.'
+                        : filterStatus !== 'all'
+                          ? 'Try selecting a different status filter.'
+                          : 'Create your first document request to get started.'}
                   </p>
-                  {filterStatus === 'all' && activeTab === 'all' && (
+                  {filterStatus === 'all' && activeTab === 'all' && !searchQuery && (
                     <button style={styles.addButton} onClick={() => navigate('/documents/request')}>
                       <span>➕</span> Request Document
                     </button>
@@ -297,13 +420,33 @@ const Documents: React.FC = () => {
                   <table style={styles.table}>
                     <thead>
                       <tr style={styles.tableHeaderRow}>
-                        <th style={styles.tableHeaderCell}>Requester</th>
-                        <th style={styles.tableHeaderCell}>Document</th>
+                        <th
+                          style={{ ...styles.tableHeaderCell, ...styles.sortableHeader }}
+                          onClick={() => handleSortChange('name')}
+                        >
+                          Requester {getSortIcon('name')}
+                        </th>
+                        <th
+                          style={{ ...styles.tableHeaderCell, ...styles.sortableHeader }}
+                          onClick={() => handleSortChange('documentType')}
+                        >
+                          Document {getSortIcon('documentType')}
+                        </th>
                         {activeTab === 'nonResident' && <th style={styles.tableHeaderCell}>Boat No.</th>}
                         {activeTab === 'nonResident' && <th style={styles.tableHeaderCell}>Address</th>}
                         <th style={styles.tableHeaderCell}>Purpose</th>
-                        <th style={styles.tableHeaderCell}>Status</th>
-                        <th style={styles.tableHeaderCell}>Date</th>
+                        <th
+                          style={{ ...styles.tableHeaderCell, ...styles.sortableHeader }}
+                          onClick={() => handleSortChange('status')}
+                        >
+                          Status {getSortIcon('status')}
+                        </th>
+                        <th
+                          style={{ ...styles.tableHeaderCell, ...styles.sortableHeader }}
+                          onClick={() => handleSortChange('date')}
+                        >
+                          Date {getSortIcon('date')}
+                        </th>
                         <th style={styles.tableHeaderCell}>Actions</th>
                       </tr>
                     </thead>
@@ -395,7 +538,7 @@ const Documents: React.FC = () => {
 };
 
 // ---------------------------------------------------------------------------
-// Styles — mirrors HomePage / Residents exactly
+// Styles
 // ---------------------------------------------------------------------------
 const styles: { [key: string]: React.CSSProperties } = {
   // Layout
@@ -430,7 +573,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '0',
   },
 
-  // Stat cards (identical grid as HomePage)
+  // Stat cards
   statsContainer: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -518,6 +661,52 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     marginBottom: '24px',
     gap: '20px',
+    flexWrap: 'wrap',
+  },
+  toolbarLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  searchContainer: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    flex: '1 1 300px',
+    minWidth: '200px',
+    maxWidth: '400px',
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: '12px',
+    fontSize: '16px',
+    color: '#64748b',
+    pointerEvents: 'none',
+  },
+  searchInput: {
+    width: '100%',
+    padding: '10px 36px 10px 36px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '14px',
+    backgroundColor: 'white',
+    color: '#374151',
+    outline: 'none',
+    transition: 'border-color 0.2s',
+  },
+  clearSearchBtn: {
+    position: 'absolute',
+    right: '8px',
+    background: 'none',
+    border: 'none',
+    color: '#94a3b8',
+    cursor: 'pointer',
+    fontSize: '16px',
+    padding: '4px 8px',
+    borderRadius: '4px',
+    transition: 'color 0.2s, background-color 0.2s',
   },
   filterGroup: {
     display: 'flex',
@@ -539,7 +728,21 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#374151',
     cursor: 'pointer',
     outline: 'none',
-    minWidth: '160px',
+    minWidth: '140px',
+  },
+  sortOrderBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '10px 16px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '14px',
+    backgroundColor: 'white',
+    color: '#374151',
+    cursor: 'pointer',
+    fontWeight: '500',
+    transition: 'all 0.2s',
   },
   addButton: {
     display: 'flex',
@@ -557,7 +760,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     whiteSpace: 'nowrap',
   },
 
-  // Table container (same as Residents)
+  // Table container
   tableContainer: {
     backgroundColor: 'white',
     borderRadius: '12px',
@@ -591,6 +794,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     textTransform: 'uppercase' as const,
     letterSpacing: '0.4px',
     whiteSpace: 'nowrap',
+  },
+  sortableHeader: {
+    cursor: 'pointer',
+    userSelect: 'none' as const,
+    transition: 'background-color 0.2s',
   },
   tableRow: {
     transition: 'background-color 0.1s ease',
@@ -668,7 +876,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#64748b',
   },
 
-  // Action buttons (same style as Residents)
+  // Action buttons
   actionButtons: {
     display: 'flex',
     gap: '8px',
@@ -753,9 +961,49 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
 };
 
-// Spinner keyframes (injected once)
+// Spinner keyframes
 const styleTag = document.createElement('style');
-styleTag.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`;
+styleTag.textContent = `
+  @keyframes spin { 
+    to { transform: rotate(360deg); } 
+  }
+  
+  .searchInput:focus {
+    border-color: #667eea;
+  }
+  
+  .clearSearchBtn:hover {
+    color: #475569;
+    background-color: #f1f5f9;
+  }
+  
+  .sortOrderBtn:hover {
+    background-color: #f8fafc;
+    border-color: #cbd5e1;
+  }
+  
+  .sortableHeader:hover {
+    background-color: #e2e8f0;
+  }
+  
+  .addButton:hover {
+    background-color: #059669;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(16,185,129,0.3);
+  }
+  
+  .viewButton:hover {
+    background-color: #2563eb;
+  }
+  
+  .editButton:hover {
+    background-color: #d97706;
+  }
+  
+  .deleteButton:hover {
+    background-color: #dc2626;
+  }
+`;
 document.head.appendChild(styleTag);
 
 export default Documents;
