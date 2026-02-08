@@ -21,6 +21,7 @@ const HomePage: React.FC = () => {
   const [registeredVotersCount, setRegisteredVotersCount] = useState(0);
   const [householdCount, setHouseholdCount] = useState(0);
   const [blotterCount, setBlotterCount] = useState(0);
+  const [documentCount, setDocumentCount] = useState(0); // NEW: Added document count state
   const [occupationData, setOccupationData] = useState<any[]>([]);
   const [purokData, setPurokData] = useState<any[]>([]);
   const [blotterStatusData, setBlotterStatusData] = useState<any[]>([]);
@@ -325,9 +326,21 @@ const HomePage: React.FC = () => {
       }
     };
 
+    // NEW: Fetch document requests count
+    const fetchDocuments = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'documentRequests'));
+        setDocumentCount(snapshot.size);
+      } catch (error) {
+        console.error('Error fetching documents:', error);
+        setDocumentCount(0);
+      }
+    };
+
     fetchResidents();
     fetchHouseholds();
     fetchBlotters();
+    fetchDocuments(); // NEW: Added document fetch
   }, []);
 
   
@@ -347,7 +360,7 @@ const HomePage: React.FC = () => {
     },
     { title: 'Total Households', value: householdCount, icon: '🏠', color: '#43e97b', path: '/households' },
     { title: 'Blotter Reports', value: blotterCount, icon: '📋', color: '#ff6b6b', path: '/blotter' },
-    { title: 'Documents', value: blotterCount, icon: '📋', color: '#6bffabff', path: '/documents' },
+    { title: 'Documents', value: documentCount, icon: '📄', color: '#6bffabff', path: '/documents' }, // FIXED: Using documentCount
   ];
 
   // Custom tooltip for blotter status pie chart

@@ -26,6 +26,7 @@ const ViewHouseholdMembers: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [householdName, setHouseholdName] = useState<string>('');
   
   const handleEdit = (id: string) => {
     navigate(`/edit-household/${id}`);
@@ -66,7 +67,7 @@ const ViewHouseholdMembers: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        // First get the household document to get its ID
+        // First get the household document to get its ID and name
         const householdQuery = query(
           collection(db, 'households'),
           where('householdNumber', '==', householdNumber)
@@ -74,7 +75,9 @@ const ViewHouseholdMembers: React.FC = () => {
         const householdSnapshot = await getDocs(householdQuery);
 
         if (!householdSnapshot.empty) {
+          const householdData = householdSnapshot.docs[0].data();
           setHouseholdId(householdSnapshot.docs[0].id);
+          setHouseholdName(householdData.householdName || '');
         } else {
           setError('Household not found');
           setLoading(false);
@@ -169,6 +172,7 @@ const ViewHouseholdMembers: React.FC = () => {
                 <span>Back to Households</span>
               </button>
               <h1 style={styles.title}>Household #{householdNumber}</h1>
+              {householdName && <h2 style={styles.householdNameTitle}>{householdName}</h2>}
             </div>
             <LogoutButton />
           </div>
@@ -212,6 +216,7 @@ const ViewHouseholdMembers: React.FC = () => {
               </div>
               <div>
                 <h1 style={styles.title}>Household #{householdNumber}</h1>
+                {householdName && <h2 style={styles.householdNameTitle}>{householdName}</h2>}
                 <p style={styles.subtitle}>
                   {residents.length} member{residents.length !== 1 ? 's' : ''} registered
                 </p>
@@ -316,7 +321,7 @@ const ViewHouseholdMembers: React.FC = () => {
             <span style={styles.statIcon}>🎓</span>
             <div>
               <div style={styles.statNumber}>
-                {residents.filter(r => r.occupation === 'Student').length}
+                {residents.filter(r => !r.isFamilyHead && !r.isWife).length}
               </div>
               <div style={styles.statLabel}>Students/Children</div>
             </div>
@@ -602,6 +607,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     WebkitTextFillColor: 'transparent',
     backgroundClip: 'text',
   },
+  householdNameTitle: {
+    margin: '8px 0 0 0',
+    fontSize: '24px',
+    fontWeight: '600',
+    color: '#2c3e50',
+  },
   subtitle: {
     margin: '5px 0 0 0',
     color: '#666',
@@ -616,6 +627,21 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
     border: '2px solid #667eea',
     background: 'linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%)',
+  },
+  wifeCard: {
+    backgroundColor: 'white',
+    borderRadius: '15px',
+    padding: '25px',
+    marginBottom: '30px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+    border: '2px solid #ff69b4',
+    background: 'linear-gradient(135deg, #ffffff 0%, #fff5f8 100%)',
+  },
+  leadersContainer: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gap: '20px',
+    marginBottom: '30px',
   },
   cardHeader: {
     display: 'flex',
@@ -840,6 +866,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '12px',
     fontWeight: '500',
     border: '1px solid #ffcc02',
+  },
+  wifeBadge: {
+    padding: '6px 12px',
+    backgroundColor: '#ffe4f0',
+    color: '#c2185b',
+    borderRadius: '15px',
+    fontSize: '12px',
+    fontWeight: '500',
+    border: '1px solid #ff69b4',
   },
   memberBadge: {
     padding: '6px 12px',

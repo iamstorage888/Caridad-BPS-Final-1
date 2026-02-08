@@ -29,6 +29,13 @@ interface FormData {
   isRegisteredVoter: boolean;
 }
 
+// Interface for household data with name
+interface HouseholdData {
+  number: string;
+  name: string;
+  purok: string;
+}
+
 const EditResident: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -63,13 +70,18 @@ const EditResident: React.FC = () => {
   const [votersIdFront, setVotersIdFront] = useState<File | null>(null);
   const [votersIdBack, setVotersIdBack] = useState<File | null>(null);
 
-  const [households, setHouseholds] = useState<string[]>([]);
+  // UPDATED: Changed from string[] to HouseholdData[]
+  const [households, setHouseholds] = useState<HouseholdData[]>([]);
   const [allHouseholdNumbers, setAllHouseholdNumbers] = useState<string[]>([]);
   const [hasFamilyHead, setHasFamilyHead] = useState(false);
   const [hasWife, setHasWife] = useState(false);
   const [occupations, setOccupations] = useState<string[]>([]);
   const [customOccupation, setCustomOccupation] = useState('');
   const [isCustomOccupation, setIsCustomOccupation] = useState(false);
+  
+  // Household option state
+  const [householdOption, setHouseholdOption] = useState<'new' | 'existing'>('existing');
+  const [newHouseholdNumber, setNewHouseholdNumber] = useState('');
 
   // Predefined options
   const educationLevels = [
@@ -134,6 +146,22 @@ const EditResident: React.FC = () => {
     return allowedTypes.includes(file.type) && file.size <= maxSize;
   };
 
+  // Generate next household number
+  const generateNextHouseholdNumber = (existingNumbers: string[]) => {
+    if (existingNumbers.length === 0) return 'HH-001';
+    
+    const numericNumbers = existingNumbers
+      .map(num => {
+        const match = num.match(/(\d+)$/);
+        return match ? parseInt(match[1]) : 0;
+      })
+      .filter(num => num > 0);
+
+    const highest = Math.max(...numericNumbers, 0);
+    const nextNum = highest + 1;
+    return `HH-${nextNum.toString().padStart(3, '0')}`;
+  };
+
   // Fetch resident data
   useEffect(() => {
     const fetchData = async () => {
@@ -186,25 +214,53 @@ const EditResident: React.FC = () => {
     fetchData();
   }, [id]);
 
-  // Fetch households
+  // UPDATED: Fetch households with names and puroks
   useEffect(() => {
     const fetchHouseholds = async () => {
       try {
+        // Fetch complete household objects with names
         const householdSnapshot = await getDocs(collection(db, 'households'));
-        const officialHouseholds = householdSnapshot.docs.map(doc => doc.data().householdNumber);
+        const officialHouseholds: HouseholdData[] = householdSnapshot.docs
+          .map(doc => {
+            const data = doc.data();
+            return {
+              number: data.householdNumber || '',
+              name: data.householdName || 'Unnamed Household',
+              purok: data.purok || 'Unspecified'
+            };
+          })
+          .filter(h => h.number) // Filter out any without numbers
+          .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
+        
+        console.log('📋 Official households with names:', officialHouseholds);
+        
+        // Get all household numbers for next number generation
+        const officialNumbers = officialHouseholds.map(h => h.number);
         
         const residentsSnapshot = await getDocs(collection(db, 'residents'));
         const residentHouseholds = residentsSnapshot.docs
           .map(doc => doc.data().householdNumber)
           .filter(Boolean);
 
-        const allNumbers = [...officialHouseholds, ...residentHouseholds];
+        const allNumbers = [...officialNumbers, ...residentHouseholds];
         const uniqueNumbers = Array.from(new Set(allNumbers)).sort((a, b) => 
           a.localeCompare(b, undefined, { numeric: true })
         );
 
+        console.log('📊 All household numbers (for next number generation):', uniqueNumbers);
+
         setAllHouseholdNumbers(uniqueNumbers);
-        setHouseholds(uniqueNumbers);
+        
+        // Set household objects for dropdown (with names)
+        setHouseholds(officialHouseholds);
+        
+        // Generate next household number based on all existing numbers
+        const nextNumber = generateNextHouseholdNumber(uniqueNumbers);
+        setNewHouseholdNumber(nextNumber);
+        
+        console.log('✨ Next household number:', nextNumber);
+        console.log('🏠 Households available in dropdown:', officialHouseholds.length);
+        
       } catch (error) {
         console.error('Error fetching households:', error);
       }
@@ -228,6 +284,14 @@ const EditResident: React.FC = () => {
     };
     fetchOccupations();
   }, []);
+
+  // Update household option effect
+  useEffect(() => {
+    if (householdOption === 'new') {
+      setFormData(prev => ({ ...prev, householdNumber: newHouseholdNumber }));
+    }
+    // Note: We don't reset to empty when switching to 'existing' to preserve the selected household
+  }, [householdOption, newHouseholdNumber]);
 
   // Check family head and wife
   useEffect(() => {
@@ -867,21 +931,85 @@ const EditResident: React.FC = () => {
               <div style={styles.row}>
                 <div style={styles.fieldGroup}>
                   <label style={styles.label}>
-                    Household Number <span style={styles.required}>*</span>
+                    Household Assignment <span style={styles.required}>*</span>
                   </label>
-                  <select
-                    value={formData.householdNumber}
-                    onChange={(e) => setFormData(prev => ({ ...prev, householdNumber: e.target.value }))}
-                    style={{
-                      ...styles.input,
-                      ...(errors.householdNumber ? styles.inputError : {})
-                    }}
-                  >
-                    <option value="">Select existing household</option>
-                    {households.map((num, idx) => (
-                      <option key={idx} value={num}>{num}</option>
-                    ))}
-                  </select>
+                  
+                  <div style={styles.radioGroup}>
+                    <label style={styles.radioLabel}>
+                      <input
+                        type="radio"
+                        name="householdOption"
+                        value="new"
+                        checked={householdOption === 'new'}
+                        onChange={(e) => setHouseholdOption(e.target.value as 'new' | 'existing')}
+                        style={styles.radioInput}
+                      />
+                      <span style={styles.radioText}>
+                        🆕 Create New Household
+                        {householdOption === 'new' && (
+                          <span style={styles.autoNumber}>({newHouseholdNumber})</span>
+                        )}
+                      </span>
+                    </label>
+                    
+                    <label style={styles.radioLabel}>
+                      <input
+                        type="radio"
+                        name="householdOption"
+                        value="existing"
+                        checked={householdOption === 'existing'}
+                        onChange={(e) => setHouseholdOption(e.target.value as 'new' | 'existing')}
+                        style={styles.radioInput}
+                      />
+                      <span style={styles.radioText}>
+                        🏠 Join Official Household
+                        {households.length === 0 && (
+                          <span style={styles.warningText}> (No official households yet)</span>
+                        )}
+                      </span>
+                    </label>
+                  </div>
+
+                  {householdOption === 'new' ? (
+                    <div style={styles.householdDisplay}>
+                      <input
+                        type="text"
+                        value={formData.householdNumber}
+                        readOnly
+                        style={{
+                          ...styles.input,
+                          ...styles.readOnlyInput
+                        }}
+                        placeholder="Auto-generated household number"
+                      />
+                      <small style={styles.householdHint}>
+                        ✨ Household number will be automatically assigned: <strong>{newHouseholdNumber}</strong>
+                      </small>
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        value={formData.householdNumber}
+                        onChange={(e) => setFormData(prev => ({ ...prev, householdNumber: e.target.value }))}
+                        style={{
+                          ...styles.input,
+                          ...(errors.householdNumber ? styles.inputError : {})
+                        }}
+                      >
+                        <option value="">Select official household</option>
+                        {households.map((household, idx) => (
+                          <option key={idx} value={household.number}>
+                            {household.name} ({household.number}) - {household.purok}
+                          </option>
+                        ))}
+                      </select>
+                      {households.length === 0 && (
+                        <small style={styles.infoText}>
+                          ℹ️ No official households available. Please create a household first from the <strong>Add Household</strong> page, or choose "Create New Household" above.
+                        </small>
+                      )}
+                    </>
+                  )}
                   {errors.householdNumber && <span style={styles.errorText}>{errors.householdNumber}</span>}
                 </div>
 
@@ -1139,6 +1267,66 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '12px',
     marginTop: '4px',
     fontWeight: '500',
+  },
+  infoText: {
+    fontSize: '12px',
+    color: '#3b82f6',
+    marginTop: '8px',
+    display: 'block',
+    lineHeight: '1.5',
+  },
+  radioGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    marginBottom: '16px',
+  },
+  radioLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '12px',
+    backgroundColor: '#f8fafc',
+    borderRadius: '8px',
+    border: '2px solid #e2e8f0',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+  },
+  radioInput: {
+    marginRight: '10px',
+    width: '18px',
+    height: '18px',
+    accentColor: '#667eea',
+    cursor: 'pointer',
+  },
+  radioText: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#374151',
+  },
+  autoNumber: {
+    marginLeft: '8px',
+    color: '#667eea',
+    fontWeight: '600',
+  },
+  warningText: {
+    marginLeft: '8px',
+    color: '#f59e0b',
+    fontWeight: '500',
+    fontSize: '12px',
+  },
+  householdDisplay: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  householdHint: {
+    fontSize: '12px',
+    color: '#64748b',
+    fontStyle: 'italic',
+  },
+  readOnlyInput: {
+    backgroundColor: '#f1f5f9',
+    cursor: 'not-allowed',
   },
   checkboxRow: {
     display: 'grid',
