@@ -32,6 +32,7 @@ const Documents: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showDeleteButtons, setShowDeleteButtons] = useState(false);
 
   const fetchRequests = async () => {
     try {
@@ -297,7 +298,7 @@ const Documents: React.FC = () => {
           })}
         </div>
 
-        {/* Toolbar: search, filter, sort, and action button */}
+        {/* Toolbar: search, filter, sort, delete toggle, and action button */}
         <div style={styles.toolbar}>
           <div style={styles.toolbarLeft}>
             {/* Search bar */}
@@ -360,6 +361,20 @@ const Documents: React.FC = () => {
             >
               {sortOrder === 'asc' ? '↑ Ascending' : '↓ Descending'}
             </button>
+
+            {/* Delete toggle */}
+            <div style={styles.deleteToggleContainer}>
+              <label style={styles.toggleLabel}>
+                <input
+                  type="checkbox"
+                  checked={showDeleteButtons}
+                  onChange={(e) => setShowDeleteButtons(e.target.checked)}
+                  style={styles.toggleCheckbox}
+                />
+                <span style={styles.toggleSlider}></span>
+                <span style={styles.toggleText}>Show Delete</span>
+              </label>
+            </div>
           </div>
 
           <button style={styles.addButton} onClick={() => navigate('/documents/request')}>
@@ -519,7 +534,9 @@ const Documents: React.FC = () => {
                               <div style={styles.actionButtons}>
                                 <button onClick={() => handleView(req.id)} style={styles.viewButton}>👁️ View</button>
                                 <button onClick={() => handleEdit(req.id)} style={styles.editButton}>✏️ Edit</button>
-                                <button onClick={() => handleDelete(req.id)} style={styles.deleteButton}>🗑️ Delete</button>
+                                {showDeleteButtons && (
+                                  <button onClick={() => handleDelete(req.id)} style={styles.deleteButton}>🗑️ Delete</button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -744,6 +761,38 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '500',
     transition: 'all 0.2s',
   },
+  deleteToggleContainer: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  toggleLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    cursor: 'pointer',
+    position: 'relative',
+  },
+  toggleCheckbox: {
+    position: 'absolute',
+    opacity: 0,
+    width: 0,
+    height: 0,
+  },
+  toggleSlider: {
+    width: '40px',
+    height: '20px',
+    backgroundColor: '#cbd5e0',
+    borderRadius: '20px',
+    position: 'relative',
+    transition: 'background-color 0.3s ease',
+    display: 'inline-block',
+  },
+  toggleText: {
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#64748b',
+    whiteSpace: 'nowrap',
+  },
   addButton: {
     display: 'flex',
     alignItems: 'center',
@@ -961,7 +1010,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
 };
 
-// Spinner keyframes
+// Spinner keyframes and toggle styles
 const styleTag = document.createElement('style');
 styleTag.textContent = `
   @keyframes spin { 
@@ -1002,6 +1051,28 @@ styleTag.textContent = `
   
   .deleteButton:hover {
     background-color: #dc2626;
+  }
+
+  /* Toggle switch styles */
+  input[type="checkbox"]:checked + span {
+    background-color: #ef4444 !important;
+  }
+
+  input[type="checkbox"]:checked + span:after {
+    transform: translateX(20px);
+  }
+
+  input[type="checkbox"] + span:after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background-color: white;
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   }
 `;
 document.head.appendChild(styleTag);
