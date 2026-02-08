@@ -42,7 +42,7 @@ const DocumentTemplate: React.FC<DocumentTemplateProps> = ({
   const commonHeader = (
     <div style={{ textAlign: 'center', marginBottom: '20px' }}>
       <h2>Republic of the Philippines</h2>
-      <h3>Barangay Example</h3>
+      <h3>Barangay Caridad</h3>
       <p>Date Issued: {today}</p>
       <hr />
     </div>
