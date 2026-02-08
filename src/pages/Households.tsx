@@ -17,6 +17,7 @@ const Households: React.FC = () => {
   const [households, setHouseholds] = useState<Household[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDeleteButtons, setShowDeleteButtons] = useState(false);
 
   useEffect(() => {
     const fetchHouseholds = async () => {
@@ -81,21 +82,36 @@ const Households: React.FC = () => {
         </div>
 
         <div style={styles.toolbar}>
-          <div style={styles.searchContainer}>
-            <span style={styles.searchIcon}>🔍</span>
-            <input
-              type="text"
-              placeholder="Search households by name, number, or purok..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={styles.searchInput}
-            />
-          </div>
-          <button style={styles.addButton} onClick={handleAddHousehold}>
-            <span style={styles.buttonIcon}>🏠</span>
-            Add Household
-          </button>
-        </div>
+  <div style={styles.searchContainer}>
+    <span style={styles.searchIcon}>🔍</span>
+    <input
+      type="text"
+      placeholder="Search households by name, number, or purok..."
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      style={styles.searchInput}
+    />
+  </div>
+  
+  {/* DELETE TOGGLE - NEW */}
+  <div style={styles.deleteToggleContainer}>
+    <label style={styles.toggleLabel}>
+      <input
+        type="checkbox"
+        checked={showDeleteButtons}
+        onChange={(e) => setShowDeleteButtons(e.target.checked)}
+        style={styles.toggleCheckbox}
+      />
+      <span style={styles.toggleSlider}></span>
+      <span style={styles.toggleText}>Show Delete</span>
+    </label>
+  </div>
+  
+  <button style={styles.addButton} onClick={handleAddHousehold}>
+    <span style={styles.buttonIcon}>🏠</span>
+    Add Household
+  </button>
+</div>
 
         <div style={styles.tableContainer}>
           {loading ? (
@@ -163,27 +179,29 @@ const Households: React.FC = () => {
                           </span>
                         </td>
                         <td style={styles.tableCell}>
-                          <div style={styles.actionButtons}>
-                            <button 
-                              onClick={() => handleView(household.householdNumber)} 
-                              style={styles.viewButton}
-                            >
-                              👁️ View
-                            </button>
-                            <button 
-                              onClick={() => handleEdit(household.id)} 
-                              style={styles.editButton}
-                            >
-                              ✏️ Edit
-                            </button>
-                            <button 
-                              onClick={() => handleDelete(household.id)} 
-                              style={styles.deleteButton}
-                            >
-                              🗑️ Delete
-                            </button>
-                          </div>
-                        </td>
+  <div style={styles.actionButtons}>
+    <button 
+      onClick={() => handleView(household.householdNumber)} 
+      style={styles.viewButton}
+    >
+      👁️ View
+    </button>
+    <button 
+      onClick={() => handleEdit(household.id)} 
+      style={styles.editButton}
+    >
+      ✏️ Edit
+    </button>
+    {showDeleteButtons && (
+      <button 
+        onClick={() => handleDelete(household.id)} 
+        style={styles.deleteButton}
+      >
+        🗑️ Delete
+      </button>
+    )}
+  </div>
+</td>
                       </tr>
                     ))
                   )}
@@ -424,6 +442,42 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '16px',
     margin: '0',
   },
+
+  deleteToggleContainer: {
+  display: 'flex',
+  alignItems: 'center',
+  marginLeft: 'auto',
+  marginRight: '12px',
+},
+toggleLabel: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  cursor: 'pointer',
+  position: 'relative',
+},
+toggleCheckbox: {
+  position: 'absolute',
+  opacity: 0,
+  width: 0,
+  height: 0,
+},
+toggleSlider: {
+  width: '40px',
+  height: '20px',
+  backgroundColor: '#cbd5e0',
+  borderRadius: '20px',
+  position: 'relative',
+  transition: 'background-color 0.3s ease',
+  display: 'inline-block',
+},
+toggleText: {
+  fontSize: '13px',
+  fontWeight: '500',
+  color: '#64748b',
+  whiteSpace: 'nowrap',
+},
+
 };
 
 export default Households;
