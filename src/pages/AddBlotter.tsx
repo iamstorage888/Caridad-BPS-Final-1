@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
 import LogoutButton from '../components/LogoutButton';
 import { db } from '../Database/firebase';
-import { collection, addDoc, getDocs } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 interface AddBlotter {
@@ -50,31 +50,26 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Format resident name
   const formatResidentName = (resident: Resident): string => {
     const middleInitial = resident.middleName ? ` ${resident.middleName.charAt(0)}.` : '';
     return `${resident.lastName}, ${resident.firstName}${middleInitial}`;
   };
 
-  // Filter residents based on search
   const filteredResidents = residents.filter(resident => {
     const fullName = formatResidentName(resident).toLowerCase();
     return fullName.includes(searchTerm.toLowerCase());
   });
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setSearchTerm(newValue);
@@ -83,7 +78,6 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
     setIsOpen(true);
   };
 
-  // Handle resident selection
   const handleSelectResident = (resident: Resident) => {
     const name = formatResidentName(resident);
     onChange(name);
@@ -92,7 +86,6 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
     setIsOpen(false);
   };
 
-  // Handle input focus
   const handleFocus = () => {
     setIsOpen(true);
     setSearchTerm(value);
@@ -116,10 +109,8 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
             ...(error ? styles.inputError : {})
           }}
         />
-        
         {isOpen && (
           <div style={styles.dropdownMenu}>
-            {/* Custom entry option */}
             {searchTerm && !filteredResidents.some(r => formatResidentName(r) === searchTerm) && (
               <div
                 style={styles.dropdownOption}
@@ -136,8 +127,6 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                 </div>
               </div>
             )}
-
-            {/* Residents list */}
             {filteredResidents.length > 0 ? (
               <>
                 <div style={styles.dropdownHeader}>
@@ -184,6 +173,22 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
   );
 };
 
+// ─── Default incident types (always present) ────────────────────────────────
+const DEFAULT_INCIDENT_TYPES = [
+  'Theft',
+  'Assault',
+  'Vandalism',
+  'Noise Complaint',
+  'Property Dispute',
+  'Domestic Violence',
+  'Public Disturbance',
+  'Harassment',
+  'Other',
+];
+
+// Firestore document that stores the custom incident-type list
+const CUSTOM_TYPES_DOC = 'settings/incidentTypes';
+
 const AddBlotter: React.FC = () => {
   const [formData, setFormData] = useState<AddBlotter>({
     complainant: '',
@@ -194,55 +199,74 @@ const AddBlotter: React.FC = () => {
     details: '',
   });
 
+  // The full list (default + any custom ones already saved)
+  const [incidentTypes, setIncidentTypes] = useState<string[]>(DEFAULT_INCIDENT_TYPES);
+  // Tracks what the user typed in the "Other" text box
+  const [customIncidentType, setCustomIncidentType] = useState('');
+
   const [residents, setResidents] = useState<Resident[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   const navigate = useNavigate();
 
   const puroks = [
-    'Purok 1',
-    'Purok 2',
-    'Purok 3',
-    'Purok 4',
-    'Purok 5',
-    'Purok 6',
-    'Purok 7',
+    'Purok 1', 'Purok 2', 'Purok 3', 'Purok 4',
+    'Purok 5', 'Purok 6', 'Purok 7',
   ];
 
-  const incidentTypes = [
-    'Theft',
-    'Assault',
-    'Vandalism',
-    'Noise Complaint',
-    'Property Dispute',
-    'Domestic Violence',
-    'Public Disturbance',
-    'Harassment',
-    'Other'
-  ];
+  // ─── Load custom incident types from Firestore ───────────────────────────
+  const fetchIncidentTypes = useCallback(async () => {
+    try {
+      const docRef = doc(db, 'settings', 'incidentTypes');
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const saved: string[] = snap.data().types || [];
+        // Merge: default list first, then any custom entries not already present
+        const merged = [
+          ...DEFAULT_INCIDENT_TYPES.filter(t => t !== 'Other'),
+          ...saved.filter(t => !DEFAULT_INCIDENT_TYPES.includes(t)),
+          'Other',
+        ];
+        setIncidentTypes(merged);
+      }
+    } catch (err) {
+      console.error('Error loading incident types:', err);
+    }
+  }, []);
 
-  // Fetch residents with error handling
+  // ─── Persist a new custom type to Firestore ──────────────────────────────
+  const saveCustomIncidentType = async (newType: string): Promise<void> => {
+    try {
+      const docRef = doc(db, 'settings', 'incidentTypes');
+      const snap = await getDoc(docRef);
+      const existing: string[] = snap.exists() ? snap.data().types || [] : [];
+      if (!existing.includes(newType)) {
+        await setDoc(docRef, { types: [...existing, newType] }, { merge: true });
+      }
+    } catch (err) {
+      console.error('Error saving custom incident type:', err);
+    }
+  };
+
+  // ─── Fetch residents ─────────────────────────────────────────────────────
   const fetchResidents = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      
       const querySnapshot = await getDocs(collection(db, 'residents'));
-      const fetchedResidents: Resident[] = querySnapshot.docs.map(doc => {
-        const data = doc.data();
+      const fetchedResidents: Resident[] = querySnapshot.docs.map(d => {
+        const data = d.data();
         return {
-          id: doc.id,
+          id: d.id,
           firstName: data.firstName || '',
           lastName: data.lastName || '',
           middleName: data.middleName || '',
         };
       });
-      
-      // Sort residents alphabetically by last name
       fetchedResidents.sort((a, b) => a.lastName.localeCompare(b.lastName));
       setResidents(fetchedResidents);
     } catch (err) {
@@ -255,32 +279,34 @@ const AddBlotter: React.FC = () => {
 
   useEffect(() => {
     fetchResidents();
-  }, [fetchResidents]);
+    fetchIncidentTypes();
+  }, [fetchResidents, fetchIncidentTypes]);
 
+  // ─── Validation ──────────────────────────────────────────────────────────
   const validateForm = (): boolean => {
-    const newErrors: {[key: string]: string} = {};
+    const newErrors: { [key: string]: string } = {};
 
-    if (!formData.complainant.trim()) {
-      newErrors.complainant = 'Complainant is required';
-    }
-    if (!formData.respondent.trim()) {
-      newErrors.respondent = 'Respondent is required';
-    }
-    if (!formData.incidentType.trim()) {
+    if (!formData.complainant.trim()) newErrors.complainant = 'Complainant is required';
+    if (!formData.respondent.trim())  newErrors.respondent  = 'Respondent is required';
+
+    if (formData.incidentType === 'Other') {
+      if (!customIncidentType.trim()) {
+        newErrors.incidentType = 'Please describe the incident type';
+      }
+    } else if (!formData.incidentType.trim()) {
       newErrors.incidentType = 'Incident type is required';
     }
+
     if (!formData.incidentDate) {
       newErrors.incidentDate = 'Incident date is required';
     } else {
       const selectedDate = new Date(formData.incidentDate);
-      const today = new Date();
-      if (selectedDate > today) {
+      if (selectedDate > new Date()) {
         newErrors.incidentDate = 'Incident date cannot be in the future';
       }
     }
-    if (!formData.location.trim()) {
-      newErrors.location = 'Location is required';
-    }
+
+    if (!formData.location.trim()) newErrors.location = 'Location is required';
     if (!formData.details.trim()) {
       newErrors.details = 'Incident details are required';
     } else if (formData.details.trim().length < 10) {
@@ -294,55 +320,63 @@ const AddBlotter: React.FC = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Clear specific field error when user starts typing
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+
+    // Reset custom text when switching away from "Other"
+    if (name === 'incidentType' && value !== 'Other') {
+      setCustomIncidentType('');
     }
   };
 
   const handleDropdownChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Clear specific field error
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
+  // ─── Submit ───────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     try {
       setSubmitting(true);
       setError(null);
-      
-      // Add timestamp for creation
+
+      // Resolve the final incident type
+      let resolvedType = formData.incidentType;
+      if (formData.incidentType === 'Other' && customIncidentType.trim()) {
+        resolvedType = customIncidentType.trim();
+
+        // If the user typed something new, persist it so it appears in the list
+        if (!DEFAULT_INCIDENT_TYPES.includes(resolvedType)) {
+          await saveCustomIncidentType(resolvedType);
+          // Also update local state immediately
+          setIncidentTypes(prev => {
+            if (prev.includes(resolvedType)) return prev;
+            return [...prev.filter(t => t !== 'Other'), resolvedType, 'Other'];
+          });
+        }
+      }
+
       const blotterData = {
         ...formData,
+        incidentType: resolvedType,
         createdAt: new Date().toISOString(),
-        status: 'filed' // Default status
+        status: 'filed',
       };
-      
+
       await addDoc(collection(db, 'blotters'), blotterData);
-      
       setSuccess(true);
-      setTimeout(() => {
-        navigate('/blotter');
-      }, 2000);
-      
-    } catch (error: any) {
-      console.error('Error submitting blotter:', error);
+      setTimeout(() => navigate('/blotter'), 2000);
+    } catch (err: any) {
+      console.error('Error submitting blotter:', err);
       setError('Failed to submit blotter report. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
+  // ─── Success screen ───────────────────────────────────────────────────────
   if (success) {
     return (
       <div style={styles.container}>
@@ -354,32 +388,29 @@ const AddBlotter: React.FC = () => {
             <p style={styles.successMessage}>
               Your blotter report has been saved and is now filed for review.
             </p>
-            <p style={styles.redirectMessage}>
-              Redirecting to reports page...
-            </p>
+            <p style={styles.redirectMessage}>Redirecting to reports page...</p>
           </div>
         </div>
       </div>
     );
   }
 
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={styles.container}>
       <Sidebar />
       <div style={styles.mainContent}>
         <div style={styles.header}>
           <div style={styles.headerLeft}>
-            <button 
-              onClick={() => navigate('/blotter')} 
+            <button
+              onClick={() => navigate('/blotter')}
               style={styles.backButton}
               className="back-button"
             >
               ← Back to Reports
             </button>
             <h1 style={styles.title}>Add Blotter Report</h1>
-            <p style={styles.subtitle}>
-              Fill out the form below to create a new blotter report
-            </p>
+            <p style={styles.subtitle}>Fill out the form below to create a new blotter report</p>
           </div>
           <div style={styles.headerRight}>
             <LogoutButton />
@@ -390,64 +421,47 @@ const AddBlotter: React.FC = () => {
           <div style={styles.errorBanner}>
             <span style={styles.errorIcon}>⚠</span>
             <span>{error}</span>
-            <button 
-              onClick={() => setError(null)} 
-              style={styles.dismissButton}
-            >
-              ×
-            </button>
+            <button onClick={() => setError(null)} style={styles.dismissButton}>×</button>
           </div>
         )}
 
         <div style={styles.formContainer} className="form-container">
           <form onSubmit={handleSubmit} style={styles.form}>
+            {/* ── Involved Parties ── */}
             <div style={styles.formSection}>
-              <h3 style={styles.sectionTitle}>
-                👥 Involved Parties
-              </h3>
-              
+              <h3 style={styles.sectionTitle}>👥 Involved Parties</h3>
               <div style={styles.formRow}>
                 <SearchableDropdown
-                  label="Complainant"
-                  icon="👤"
-                  name="complainant"
+                  label="Complainant" icon="👤" name="complainant"
                   value={formData.complainant}
-                  onChange={(value) => handleDropdownChange('complainant', value)}
-                  residents={residents}
-                  error={errors.complainant}
+                  onChange={v => handleDropdownChange('complainant', v)}
+                  residents={residents} error={errors.complainant}
                   placeholder="Search resident or enter custom name..."
                 />
-
                 <SearchableDropdown
-                  label="Respondent"
-                  icon="👤"
-                  name="respondent"
+                  label="Respondent" icon="👤" name="respondent"
                   value={formData.respondent}
-                  onChange={(value) => handleDropdownChange('respondent', value)}
-                  residents={residents}
-                  error={errors.respondent}
+                  onChange={v => handleDropdownChange('respondent', v)}
+                  residents={residents} error={errors.respondent}
                   placeholder="Search resident or enter custom name..."
                 />
               </div>
             </div>
 
+            {/* ── Incident Information ── */}
             <div style={styles.formSection}>
-              <h3 style={styles.sectionTitle}>
-                📄 Incident Information
-              </h3>
-              
+              <h3 style={styles.sectionTitle}>📄 Incident Information</h3>
               <div style={styles.formRow}>
+                {/* Incident Type select */}
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>
-                    ⚠ Type of Incident *
-                  </label>
+                  <label style={styles.label}>⚠ Type of Incident *</label>
                   <select
                     name="incidentType"
                     value={formData.incidentType}
                     onChange={handleChange}
                     style={{
                       ...styles.input,
-                      ...(errors.incidentType ? styles.inputError : {})
+                      ...(errors.incidentType ? styles.inputError : {}),
                     }}
                     className="form-input"
                   >
@@ -459,21 +473,51 @@ const AddBlotter: React.FC = () => {
                   {errors.incidentType && (
                     <span style={styles.errorText}>{errors.incidentType}</span>
                   )}
+
+                  {/* ── "Other" free-text box ── */}
+                  {formData.incidentType === 'Other' && (
+                    <div style={styles.otherWrapper}>
+                      <div style={styles.otherLabelRow}>
+                        <span style={styles.otherBadge}>✏️ Custom type</span>
+                        <span style={styles.otherHint}>
+                          This will be saved and appear in future reports
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        value={customIncidentType}
+                        onChange={e => {
+                          setCustomIncidentType(e.target.value);
+                          if (errors.incidentType) setErrors(prev => ({ ...prev, incidentType: '' }));
+                        }}
+                        placeholder="Describe the incident type…"
+                        style={{
+                          ...styles.input,
+                          marginTop: '8px',
+                          ...(errors.incidentType ? styles.inputError : {}),
+                        }}
+                        className="form-input"
+                        autoFocus
+                      />
+                      {customIncidentType.trim() && (
+                        <div style={styles.otherPreview}>
+                          Will be saved as: <strong>"{customIncidentType.trim()}"</strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
+                {/* Date */}
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>
-                    📅 Date of Incident *
-                  </label>
+                  <label style={styles.label}>📅 Date of Incident *</label>
                   <input
-                    name="incidentDate"
-                    type="date"
-                    value={formData.incidentDate}
-                    onChange={handleChange}
+                    name="incidentDate" type="date"
+                    value={formData.incidentDate} onChange={handleChange}
                     max={new Date().toISOString().split('T')[0]}
                     style={{
                       ...styles.input,
-                      ...(errors.incidentDate ? styles.inputError : {})
+                      ...(errors.incidentDate ? styles.inputError : {}),
                     }}
                     className="form-input"
                   />
@@ -483,48 +527,35 @@ const AddBlotter: React.FC = () => {
                 </div>
               </div>
 
+              {/* Location */}
               <div style={styles.formGroup}>
-                <label style={styles.label}>
-                  📍 Location *
-                </label>
+                <label style={styles.label}>📍 Location *</label>
                 <select
-                  name="location"
-                  value={formData.location}
-                  onChange={handleChange}
+                  name="location" value={formData.location} onChange={handleChange}
                   style={{
                     ...styles.input,
-                    ...(errors.location ? styles.inputError : {})
+                    ...(errors.location ? styles.inputError : {}),
                   }}
                   className="form-input"
                 >
                   <option value="">Select Purok</option>
-                  {puroks.map(purok => (
-                    <option key={purok} value={purok}>{purok}</option>
-                  ))}
+                  {puroks.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-                {errors.location && (
-                  <span style={styles.errorText}>{errors.location}</span>
-                )}
+                {errors.location && <span style={styles.errorText}>{errors.location}</span>}
               </div>
             </div>
 
+            {/* ── Details ── */}
             <div style={styles.formSection}>
-              <h3 style={styles.sectionTitle}>
-                📝 Details
-              </h3>
-              
+              <h3 style={styles.sectionTitle}>📝 Details</h3>
               <div style={styles.formGroup}>
-                <label style={styles.label}>
-                  Incident Details *
-                </label>
+                <label style={styles.label}>Incident Details *</label>
                 <textarea
-                  name="details"
-                  value={formData.details}
-                  onChange={handleChange}
+                  name="details" value={formData.details} onChange={handleChange}
                   placeholder="Provide detailed information about the incident..."
                   style={{
                     ...styles.textarea,
-                    ...(errors.details ? styles.inputError : {})
+                    ...(errors.details ? styles.inputError : {}),
                   }}
                   className="form-input"
                 />
@@ -534,40 +565,32 @@ const AddBlotter: React.FC = () => {
                     <span style={styles.charCountWarning}> (minimum 10)</span>
                   )}
                 </div>
-                {errors.details && (
-                  <span style={styles.errorText}>{errors.details}</span>
-                )}
+                {errors.details && <span style={styles.errorText}>{errors.details}</span>}
               </div>
             </div>
 
+            {/* ── Actions ── */}
             <div style={styles.formActions}>
-              <button 
-                type="button" 
-                onClick={() => navigate('/blotter')}
-                style={styles.cancelButton}
-                className="cancel-button"
+              <button
+                type="button" onClick={() => navigate('/blotter')}
+                style={styles.cancelButton} className="cancel-button"
                 disabled={submitting}
               >
                 Cancel
               </button>
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 style={{
                   ...styles.submitButton,
-                  ...(submitting ? styles.submitButtonDisabled : {})
+                  ...(submitting ? styles.submitButtonDisabled : {}),
                 }}
                 className="submit-button"
                 disabled={submitting}
               >
                 {submitting ? (
-                  <>
-                    <span style={styles.spinner}></span>
-                    Submitting...
-                  </>
+                  <><span style={styles.spinner}></span>Submitting...</>
                 ) : (
-                  <>
-                    💾 Submit Report
-                  </>
+                  <>💾 Submit Report</>
                 )}
               </button>
             </div>
@@ -578,395 +601,155 @@ const AddBlotter: React.FC = () => {
   );
 };
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
 const styles = {
-  container: {
-    display: 'flex',
-    minHeight: '100vh',
-    backgroundColor: '#f8f9fa',
-  },
-  mainContent: {
-    marginLeft: '260px',
-    padding: '24px',
-    width: 'calc(100% - 260px)',
-    maxWidth: '1000px',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '32px',
-  } as React.CSSProperties,
-  headerLeft: {
-    flex: 1,
-  },
-  headerRight: {
-    marginLeft: '16px',
-  },
+  container: { display: 'flex', minHeight: '100vh', backgroundColor: '#f8f9fa' },
+  mainContent: { marginLeft: '260px', padding: '24px', width: 'calc(100% - 260px)', maxWidth: '1000px' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' } as React.CSSProperties,
+  headerLeft: { flex: 1 },
+  headerRight: { marginLeft: '16px' },
   backButton: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '8px 16px',
-    backgroundColor: 'transparent',
-    color: '#6c757d',
-    border: '1px solid #dee2e6',
-    borderRadius: '6px',
-    fontSize: '14px',
-    cursor: 'pointer',
-    marginBottom: '16px',
-    transition: 'all 0.2s ease',
-    textDecoration: 'none',
+    display: 'inline-flex', alignItems: 'center', gap: '8px',
+    padding: '8px 16px', backgroundColor: 'transparent', color: '#6c757d',
+    border: '1px solid #dee2e6', borderRadius: '6px', fontSize: '14px',
+    cursor: 'pointer', marginBottom: '16px', transition: 'all 0.2s ease', textDecoration: 'none',
   } as React.CSSProperties,
-  title: {
-    fontSize: '32px',
-    fontWeight: '700',
-    color: '#212529',
-    margin: '0 0 8px 0',
-  },
-  subtitle: {
-    fontSize: '16px',
-    color: '#6c757d',
-    margin: 0,
-  },
+  title: { fontSize: '32px', fontWeight: '700', color: '#212529', margin: '0 0 8px 0' },
+  subtitle: { fontSize: '16px', color: '#6c757d', margin: 0 },
   errorBanner: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '16px',
-    backgroundColor: '#f8d7da',
-    color: '#721c24',
-    border: '1px solid #f5c6cb',
-    borderRadius: '8px',
-    marginBottom: '24px',
+    display: 'flex', alignItems: 'center', gap: '12px', padding: '16px',
+    backgroundColor: '#f8d7da', color: '#721c24', border: '1px solid #f5c6cb',
+    borderRadius: '8px', marginBottom: '24px',
   } as React.CSSProperties,
-  errorIcon: {
-    fontSize: '18px',
-    fontWeight: 'bold',
-  },
-  dismissButton: {
-    marginLeft: 'auto',
-    background: 'none',
-    border: 'none',
-    fontSize: '20px',
-    cursor: 'pointer',
-    color: '#721c24',
-    padding: '0 4px',
-  },
+  errorIcon: { fontSize: '18px', fontWeight: 'bold' },
+  dismissButton: { marginLeft: 'auto', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#721c24', padding: '0 4px' },
   successContainer: {
-    textAlign: 'center',
-    padding: '64px 24px',
-    backgroundColor: '#fff',
-    borderRadius: '12px',
-    border: '1px solid #e9ecef',
-    marginTop: '64px',
+    textAlign: 'center', padding: '64px 24px', backgroundColor: '#fff',
+    borderRadius: '12px', border: '1px solid #e9ecef', marginTop: '64px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
   } as React.CSSProperties,
-  successIcon: {
-    fontSize: '64px',
-    color: '#28a745',
-    marginBottom: '16px',
-    display: 'block',
-  },
-  successTitle: {
-    fontSize: '24px',
-    fontWeight: '600',
-    color: '#28a745',
-    margin: '16px 0 8px 0',
-  },
-  successMessage: {
-    fontSize: '16px',
-    color: '#6c757d',
-    marginBottom: '12px',
-    lineHeight: '1.5',
-  },
-  redirectMessage: {
-    fontSize: '14px',
-    color: '#495057',
-    fontStyle: 'italic',
-  },
+  successIcon: { fontSize: '64px', color: '#28a745', marginBottom: '16px', display: 'block' },
+  successTitle: { fontSize: '24px', fontWeight: '600', color: '#28a745', margin: '16px 0 8px 0' },
+  successMessage: { fontSize: '16px', color: '#6c757d', marginBottom: '12px', lineHeight: '1.5' },
+  redirectMessage: { fontSize: '14px', color: '#495057', fontStyle: 'italic' },
   formContainer: {
-    backgroundColor: '#fff',
-    borderRadius: '12px',
-    border: '1px solid #e9ecef',
-    overflow: 'hidden',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+    backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e9ecef',
+    overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
   },
-  form: {
-    padding: '32px',
-  },
-  formSection: {
-    marginBottom: '32px',
-    paddingBottom: '24px',
-    borderBottom: '1px solid #f8f9fa',
-  },
+  form: { padding: '32px' },
+  formSection: { marginBottom: '32px', paddingBottom: '24px', borderBottom: '1px solid #f8f9fa' },
   sectionTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#495057',
-    marginBottom: '20px',
+    display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px',
+    fontWeight: '600', color: '#495057', marginBottom: '20px',
   } as React.CSSProperties,
-  formRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '20px',
-  } as React.CSSProperties,
-  formGroup: {
-    marginBottom: '20px',
-    position: 'relative',
-  } as React.CSSProperties,
-  label: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#495057',
-    marginBottom: '8px',
-  } as React.CSSProperties,
+  formRow: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' } as React.CSSProperties,
+  formGroup: { marginBottom: '20px', position: 'relative' } as React.CSSProperties,
+  label: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '600', color: '#495057', marginBottom: '8px' } as React.CSSProperties,
   input: {
-    width: '100%',
-    padding: '12px 16px',
-    fontSize: '16px',
-    border: '2px solid #e9ecef',
-    borderRadius: '8px',
-    outline: 'none',
-    transition: 'border-color 0.2s ease',
-    backgroundColor: '#fff',
-    boxSizing: 'border-box',
+    width: '100%', padding: '12px 16px', fontSize: '16px', border: '2px solid #e9ecef',
+    borderRadius: '8px', outline: 'none', transition: 'border-color 0.2s ease',
+    backgroundColor: '#fff', boxSizing: 'border-box',
   } as React.CSSProperties,
-  inputError: {
-    borderColor: '#dc3545',
-  },
+  inputError: { borderColor: '#dc3545' },
   textarea: {
-    width: '100%',
-    padding: '12px 16px',
-    fontSize: '16px',
-    border: '2px solid #e9ecef',
-    borderRadius: '8px',
-    outline: 'none',
-    transition: 'border-color 0.2s ease',
-    backgroundColor: '#fff',
-    minHeight: '120px',
-    resize: 'vertical',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box',
+    width: '100%', padding: '12px 16px', fontSize: '16px', border: '2px solid #e9ecef',
+    borderRadius: '8px', outline: 'none', transition: 'border-color 0.2s ease',
+    backgroundColor: '#fff', minHeight: '120px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box',
   } as React.CSSProperties,
-  charCount: {
-    fontSize: '12px',
-    color: '#6c757d',
-    marginTop: '4px',
-    textAlign: 'right',
-  } as React.CSSProperties,
-  charCountWarning: {
-    color: '#dc3545',
-    fontWeight: '500',
-  },
-  errorText: {
-    display: 'block',
-    fontSize: '12px',
-    color: '#dc3545',
-    marginTop: '4px',
-  },
+  charCount: { fontSize: '12px', color: '#6c757d', marginTop: '4px', textAlign: 'right' } as React.CSSProperties,
+  charCountWarning: { color: '#dc3545', fontWeight: '500' },
+  errorText: { display: 'block', fontSize: '12px', color: '#dc3545', marginTop: '4px' },
   formActions: {
-    display: 'flex',
-    gap: '16px',
-    justifyContent: 'flex-end',
-    paddingTop: '24px',
-    borderTop: '1px solid #f8f9fa',
-    marginTop: '32px',
+    display: 'flex', gap: '16px', justifyContent: 'flex-end',
+    paddingTop: '24px', borderTop: '1px solid #f8f9fa', marginTop: '32px',
   } as React.CSSProperties,
   cancelButton: {
-    padding: '12px 24px',
-    backgroundColor: 'transparent',
-    color: '#6c757d',
-    border: '2px solid #dee2e6',
-    borderRadius: '8px',
-    fontSize: '16px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    padding: '12px 24px', backgroundColor: 'transparent', color: '#6c757d',
+    border: '2px solid #dee2e6', borderRadius: '8px', fontSize: '16px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease',
   },
   submitButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '12px 24px',
-    backgroundColor: '#007bff',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '16px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px',
+    backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '8px',
+    fontSize: '16px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease',
   },
-  submitButtonDisabled: {
-    backgroundColor: '#6c757d',
-    cursor: 'not-allowed',
-    opacity: 0.7,
-  },
+  submitButtonDisabled: { backgroundColor: '#6c757d', cursor: 'not-allowed', opacity: 0.7 },
   spinner: {
-    display: 'inline-block',
-    width: '16px',
-    height: '16px',
-    border: '2px solid transparent',
-    borderTop: '2px solid #fff',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
+    display: 'inline-block', width: '16px', height: '16px',
+    border: '2px solid transparent', borderTop: '2px solid #fff',
+    borderRadius: '50%', animation: 'spin 1s linear infinite',
   },
+
+  // ── "Other" text box extras ──────────────────────────────────────────────
+  otherWrapper: {
+    marginTop: '12px', padding: '14px 16px',
+    backgroundColor: '#f0f7ff', border: '1px dashed #90c2ff',
+    borderRadius: '8px',
+  } as React.CSSProperties,
+  otherLabelRow: {
+    display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+  } as React.CSSProperties,
+  otherBadge: {
+    display: 'inline-flex', alignItems: 'center', gap: '4px',
+    padding: '3px 10px', backgroundColor: '#dbeafe', color: '#1d4ed8',
+    borderRadius: '99px', fontSize: '12px', fontWeight: '600',
+  } as React.CSSProperties,
+  otherHint: { fontSize: '12px', color: '#64748b', fontStyle: 'italic' },
+  otherPreview: {
+    marginTop: '8px', fontSize: '13px', color: '#047857',
+    backgroundColor: '#d1fae5', padding: '6px 12px', borderRadius: '6px',
+    display: 'inline-block',
+  } as React.CSSProperties,
 
   // Dropdown styles
-  dropdownContainer: {
-    position: 'relative',
-  } as React.CSSProperties,
+  dropdownContainer: { position: 'relative' } as React.CSSProperties,
   dropdownMenu: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    border: '2px solid #007bff',
-    borderRadius: '8px',
-    marginTop: '4px',
-    maxHeight: '300px',
-    overflowY: 'auto',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    zIndex: 1000,
+    position: 'absolute', top: '100%', left: 0, right: 0,
+    backgroundColor: '#fff', border: '2px solid #007bff', borderRadius: '8px',
+    marginTop: '4px', maxHeight: '300px', overflowY: 'auto',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000,
   } as React.CSSProperties,
   dropdownHeader: {
-    padding: '12px 16px',
-    backgroundColor: '#f8f9fa',
-    borderBottom: '1px solid #e9ecef',
-    fontSize: '13px',
-    fontWeight: '600',
-    color: '#495057',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    position: 'sticky',
-    top: 0,
-    zIndex: 1,
+    padding: '12px 16px', backgroundColor: '#f8f9fa', borderBottom: '1px solid #e9ecef',
+    fontSize: '13px', fontWeight: '600', color: '#495057',
+    display: 'flex', alignItems: 'center', gap: '8px', position: 'sticky', top: 0, zIndex: 1,
   } as React.CSSProperties,
-  dropdownList: {
-    maxHeight: '240px',
-    overflowY: 'auto',
-  } as React.CSSProperties,
+  dropdownList: { maxHeight: '240px', overflowY: 'auto' } as React.CSSProperties,
   dropdownOption: {
-    padding: '12px 16px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    transition: 'background-color 0.15s ease',
+    padding: '12px 16px', cursor: 'pointer', display: 'flex',
+    alignItems: 'center', gap: '12px', transition: 'background-color 0.15s ease',
     borderBottom: '1px solid #f8f9fa',
   } as React.CSSProperties,
-  dropdownOptionSelected: {
-    backgroundColor: '#e7f3ff',
-  },
-  customIcon: {
-    fontSize: '18px',
-    flexShrink: 0,
-  },
-  residentIcon: {
-    fontSize: '16px',
-    flexShrink: 0,
-  },
-  optionMain: {
-    fontSize: '14px',
-    fontWeight: '500',
-    color: '#212529',
-  },
-  optionSub: {
-    fontSize: '12px',
-    color: '#6c757d',
-    marginTop: '2px',
-  },
-  noResults: {
-    padding: '32px 16px',
-    textAlign: 'center',
-    color: '#6c757d',
-  } as React.CSSProperties,
-  noResultsIcon: {
-    fontSize: '32px',
-    display: 'block',
-    marginBottom: '12px',
-    opacity: 0.5,
-  },
-  noResultsText: {
-    fontSize: '14px',
-    fontWeight: '500',
-    marginBottom: '4px',
-  },
-  noResultsSub: {
-    fontSize: '12px',
-    color: '#9ca3af',
-  },
+  dropdownOptionSelected: { backgroundColor: '#e7f3ff' },
+  customIcon: { fontSize: '18px', flexShrink: 0 },
+  residentIcon: { fontSize: '16px', flexShrink: 0 },
+  optionMain: { fontSize: '14px', fontWeight: '500', color: '#212529' },
+  optionSub: { fontSize: '12px', color: '#6c757d', marginTop: '2px' },
+  noResults: { padding: '32px 16px', textAlign: 'center', color: '#6c757d' } as React.CSSProperties,
+  noResultsIcon: { fontSize: '32px', display: 'block', marginBottom: '12px', opacity: 0.5 },
+  noResultsText: { fontSize: '14px', fontWeight: '500', marginBottom: '4px' },
+  noResultsSub: { fontSize: '12px', color: '#9ca3af' },
 };
 
-// Add CSS for animations and hover effects
+// CSS animations & hover effects
 const styleSheet = document.createElement('style');
 styleSheet.textContent = `
   @keyframes spin {
-    0% { transform: rotate(0deg); }
+    0%   { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
   }
-  
   .form-input:focus {
     border-color: #007bff !important;
     box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
   }
-  
-  .back-button:hover {
-    background-color: #e9ecef !important;
-    color: #495057 !important;
-    transform: translateX(-2px);
-  }
-  
-  .cancel-button:hover {
-    background-color: #f8f9fa !important;
-    color: #495057 !important;
-  }
-  
+  .back-button:hover   { background-color: #e9ecef !important; color: #495057 !important; transform: translateX(-2px); }
+  .cancel-button:hover { background-color: #f8f9fa !important; color: #495057 !important; }
   .submit-button:hover:not(:disabled) {
     background-color: #0056b3 !important;
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0,123,255,0.3);
   }
-  
-  .form-container {
-    transition: all 0.3s ease;
-  }
-  
-  .form-container:hover {
-    box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
-  }
-
-  /* Dropdown option hover effect */
-  div[style*="dropdownOption"]:hover {
-    background-color: #f8f9fa !important;
-  }
-
-  /* Scrollbar styling for dropdown */
-  div[style*="dropdownMenu"]::-webkit-scrollbar {
-    width: 8px;
-  }
-
-  div[style*="dropdownMenu"]::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-  }
-
-  div[style*="dropdownMenu"]::-webkit-scrollbar-thumb {
-    background: #cbd5e0;
-    border-radius: 4px;
-  }
-
-  div[style*="dropdownMenu"]::-webkit-scrollbar-thumb:hover {
-    background: #a0aec0;
-  }
+  .form-container { transition: all 0.3s ease; }
+  .form-container:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important; }
 `;
 document.head.appendChild(styleSheet);
 
