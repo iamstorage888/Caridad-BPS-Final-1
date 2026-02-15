@@ -9,6 +9,28 @@ import {
 } from 'recharts';
 import { useNavigate } from "react-router-dom";
 
+// ─── Smart multi-value parser ───────────────────────────────────────────────
+// Used for BOTH occupations and incident types.
+// Splits combined entries like "Farmer / Fisherman" or "Theft / Assault" so each
+// individual value is counted separately. Also normalises casing so "fisherman"
+// and "Fisherman" merge into the same bucket.
+const parseOccupations = (raw: string): string[] => {
+  if (!raw || !raw.trim()) return ['Unknown'];
+
+  // Split on common separators: / | & , + "and" "or"
+  const parts = raw
+    .split(/[\/\|&,\+]|\band\b|\bor\b/gi)
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+
+  if (parts.length === 0) return ['Unknown'];
+
+  // Normalise each part: trim + Title Case
+  return parts.map(p =>
+    p.replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  );
+};
+
 const COLORS = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#ff6b6b', '#feca57', '#a29bfe', '#fd79a8', '#00b894', '#e17055', '#0984e3'];
 
 const HomePage: React.FC = () => {
@@ -103,8 +125,12 @@ const HomePage: React.FC = () => {
         for (const field of possibleDateFields) { if (data[field]) { birthDate = data[field]; break; } }
         if (birthDate && calculateAge(birthDate) >= 60) seniors++;
 
-        const occupation = data.occupation || 'Unknown';
-        occupationMap[occupation] = (occupationMap[occupation] || 0) + 1;
+        // Smart parser: split combined jobs like "Farmer / Fisherman" so each
+        // individual occupation is counted separately across all residents.
+        const parsedOccupations = parseOccupations(data.occupation || '');
+        parsedOccupations.forEach(occ => {
+          occupationMap[occ] = (occupationMap[occ] || 0) + 1;
+        });
 
         const purok = householdPurokMap[data.householdNumber] || 'Unspecified';
         purokMap[purok] = (purokMap[purok] || 0) + 1;
@@ -139,9 +165,12 @@ const HomePage: React.FC = () => {
           const status = data.status || 'filed';
           statusMap[status] = (statusMap[status] || 0) + 1;
 
-          // Incident type distribution (reflects any custom types saved by AddBlotter)
-          const itype = data.incidentType || 'Unknown';
-          incidentTypeMap[itype] = (incidentTypeMap[itype] || 0) + 1;
+          // Incident type distribution — same smart parser as occupations:
+          // "Theft / Assault" splits into "Theft" and "Assault" counted separately.
+          const parsedTypes = parseOccupations(data.incidentType || '');
+          parsedTypes.forEach(itype => {
+            incidentTypeMap[itype] = (incidentTypeMap[itype] || 0) + 1;
+          });
         });
 
         // Blotter status chart data
@@ -223,7 +252,7 @@ const HomePage: React.FC = () => {
           <p style={{ margin: '0 0 4px 0', fontWeight: '600', color: '#1a202c' }}>{data.name}</p>
           <p style={{ margin: '0', color: '#64748b' }}>Count: <span style={{ fontWeight: '600', color: data.color }}>{data.value}</span></p>
           <p style={{ margin: '0', color: '#64748b' }}>
-            Percentage: <span style={{ fontWeight: '600', color: data.color }}>
+            % of reports: <span style={{ fontWeight: '600', color: data.color }}>
               {blotterCount > 0 ? ((data.value / blotterCount) * 100).toFixed(1) : 0}%
             </span>
           </p>
@@ -272,6 +301,9 @@ const HomePage: React.FC = () => {
           {/* Occupation Distribution */}
           <div style={styles.chartCard}>
             <h2 style={styles.chartTitle}>Occupation Distribution</h2>
+            <p style={{ margin: '-12px 0 16px 0', fontSize: '13px', color: '#94a3b8', fontStyle: 'italic' }}>
+              Combined jobs (e.g. "Farmer / Fisherman") are split and counted individually
+            </p>
             <div style={styles.chartWrapper}>
               <ResponsiveContainer width="100%" height={350}>
                 <PieChart>
@@ -284,6 +316,14 @@ const HomePage: React.FC = () => {
                   <Tooltip /><Legend />
                 </PieChart>
               </ResponsiveContainer>
+            </div>
+            <div style={styles.chartSummary}>
+              <p style={styles.summaryText}>
+                {occupationData.length} unique occupation{occupationData.length !== 1 ? 's' : ''} detected
+                {occupationData.length > 0 && (
+                  <> • Most common: <strong>{occupationData.sort((a,b) => b.value - a.value)[0]?.name}</strong> ({occupationData.sort((a,b) => b.value - a.value)[0]?.value} resident{occupationData.sort((a,b) => b.value - a.value)[0]?.value !== 1 ? 's' : ''})</>
+                )}
+              </p>
             </div>
           </div>
 
@@ -388,8 +428,9 @@ const HomePage: React.FC = () => {
               </div>
               <div style={styles.chartSummary}>
                 <p style={styles.summaryText}>
-                  {incidentTypeData.length} incident type{incidentTypeData.length !== 1 ? 's' : ''} recorded •
+                  {incidentTypeData.length} incident type{incidentTypeData.length !== 1 ? 's' : ''} detected •
                   Most common: <strong>{incidentTypeData[0]?.name}</strong> ({incidentTypeData[0]?.value} case{incidentTypeData[0]?.value !== 1 ? 's' : ''})
+                  {incidentTypeData.length > 0 && <> • <em style={{ color: '#94a3b8' }}>Combined types are split and counted individually</em></>}
                 </p>
               </div>
             </div>
