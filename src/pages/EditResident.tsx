@@ -5,6 +5,7 @@ import LogoutButton from '../components/LogoutButton';
 import { db } from '../Database/firebase';
 import { doc, getDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { uploadImage, deleteImage } from '../Database/supabaseClient';
+import AddressInput, { AddressValue } from './AddressInput';
 
 interface FormData {
   lastName: string;
@@ -14,7 +15,7 @@ interface FormData {
   birthday: string;
   occupation: string;
   status: string;
-  address: string;
+  address: AddressValue;
   contactNumber: string;
   education: string;
   religion: string;
@@ -36,6 +37,15 @@ interface HouseholdData {
   purok: string;
 }
 
+const EMPTY_ADDRESS: AddressValue = {
+  region: '', regionCode: '',
+  province: '', provinceCode: '',
+  city: '', cityCode: '',
+  barangay: '', barangayCode: '',
+  street: '', zipCode: '',
+  fullAddress: '',
+};
+
 const EditResident: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -43,7 +53,7 @@ const EditResident: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingIds, setUploadingIds] = useState(false);
-  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData | 'address', string>>>({});
   
   const [formData, setFormData] = useState<FormData>({
     lastName: '',
@@ -53,7 +63,7 @@ const EditResident: React.FC = () => {
     birthday: '',
     occupation: '',
     status: '',
-    address: '',
+    address: EMPTY_ADDRESS,
     contactNumber: '',
     education: '',
     religion: '',
@@ -70,7 +80,6 @@ const EditResident: React.FC = () => {
   const [votersIdFront, setVotersIdFront] = useState<File | null>(null);
   const [votersIdBack, setVotersIdBack] = useState<File | null>(null);
 
-  // UPDATED: Changed from string[] to HouseholdData[]
   const [households, setHouseholds] = useState<HouseholdData[]>([]);
   const [allHouseholdNumbers, setAllHouseholdNumbers] = useState<string[]>([]);
   const [hasFamilyHead, setHasFamilyHead] = useState(false);
@@ -106,10 +115,6 @@ const EditResident: React.FC = () => {
   const isValidName = (name: string): boolean => {
     const nameRegex = /^[a-zA-ZñÑ\s\-\.\']+$/;
     return nameRegex.test(name.trim()) && name.trim().length >= 2;
-  };
-
-  const isValidAddress = (address: string): boolean => {
-    return address.trim().length >= 10 && /^[a-zA-Z0-9ñÑ\s\-\.\,\#]+$/.test(address.trim());
   };
 
   const isValidContactNumber = (contactNumber: string): boolean => {
@@ -171,6 +176,22 @@ const EditResident: React.FC = () => {
         const residentDoc = await getDoc(doc(db, 'residents', id));
         if (residentDoc.exists()) {
           const data = residentDoc.data();
+
+          // Reconstruct AddressValue from stored fields
+          const restoredAddress: AddressValue = {
+            region: data.addressRegion || '',
+            regionCode: data.addressRegionCode || '',
+            province: data.addressProvince || '',
+            provinceCode: data.addressProvinceCode || '',
+            city: data.addressCity || '',
+            cityCode: data.addressCityCode || '',
+            barangay: data.addressBarangay || '',
+            barangayCode: data.addressBarangayCode || '',
+            street: data.addressStreet || '',
+            zipCode: data.addressZipCode || '',
+            fullAddress: data.address || '',
+          };
+
           setFormData({
             lastName: data.lastName || '',
             firstName: data.firstName || '',
@@ -179,7 +200,7 @@ const EditResident: React.FC = () => {
             birthday: data.birthday || '',
             occupation: data.occupation || '',
             status: data.status || '',
-            address: data.address || '',
+            address: restoredAddress,
             contactNumber: data.contactNumber || '',
             education: data.education || '',
             religion: data.religion || '',
@@ -214,11 +235,10 @@ const EditResident: React.FC = () => {
     fetchData();
   }, [id]);
 
-  // UPDATED: Fetch households with names and puroks
+  // Fetch households with names and puroks
   useEffect(() => {
     const fetchHouseholds = async () => {
       try {
-        // Fetch complete household objects with names
         const householdSnapshot = await getDocs(collection(db, 'households'));
         const officialHouseholds: HouseholdData[] = householdSnapshot.docs
           .map(doc => {
@@ -229,12 +249,9 @@ const EditResident: React.FC = () => {
               purok: data.purok || 'Unspecified'
             };
           })
-          .filter(h => h.number) // Filter out any without numbers
+          .filter(h => h.number)
           .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
         
-        console.log('📋 Official households with names:', officialHouseholds);
-        
-        // Get all household numbers for next number generation
         const officialNumbers = officialHouseholds.map(h => h.number);
         
         const residentsSnapshot = await getDocs(collection(db, 'residents'));
@@ -247,19 +264,11 @@ const EditResident: React.FC = () => {
           a.localeCompare(b, undefined, { numeric: true })
         );
 
-        console.log('📊 All household numbers (for next number generation):', uniqueNumbers);
-
         setAllHouseholdNumbers(uniqueNumbers);
-        
-        // Set household objects for dropdown (with names)
         setHouseholds(officialHouseholds);
         
-        // Generate next household number based on all existing numbers
         const nextNumber = generateNextHouseholdNumber(uniqueNumbers);
         setNewHouseholdNumber(nextNumber);
-        
-        console.log('✨ Next household number:', nextNumber);
-        console.log('🏠 Households available in dropdown:', officialHouseholds.length);
         
       } catch (error) {
         console.error('Error fetching households:', error);
@@ -290,7 +299,6 @@ const EditResident: React.FC = () => {
     if (householdOption === 'new') {
       setFormData(prev => ({ ...prev, householdNumber: newHouseholdNumber }));
     }
-    // Note: We don't reset to empty when switching to 'existing' to preserve the selected household
   }, [householdOption, newHouseholdNumber]);
 
   // Check family head and wife
@@ -308,16 +316,8 @@ const EditResident: React.FC = () => {
           doc => doc.data().householdNumber === formData.householdNumber && doc.id !== id
         );
 
-        const hasFamilyHeadInHousehold = householdMembers.some(
-          doc => doc.data().isFamilyHead === true
-        );
-
-        const hasWifeInHousehold = householdMembers.some(
-          doc => doc.data().isWife === true
-        );
-
-        setHasFamilyHead(hasFamilyHeadInHousehold);
-        setHasWife(hasWifeInHousehold);
+        setHasFamilyHead(householdMembers.some(doc => doc.data().isFamilyHead === true));
+        setHasWife(householdMembers.some(doc => doc.data().isWife === true));
       } catch (error) {
         console.error('Error checking family head and wife:', error);
       }
@@ -347,7 +347,7 @@ const EditResident: React.FC = () => {
   ]);
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<Record<keyof FormData, string>> = {};
+    const newErrors: Partial<Record<keyof FormData | 'address', string>> = {};
 
     if (!formData.lastName.trim()) {
       newErrors.lastName = 'Last name is required';
@@ -386,10 +386,13 @@ const EditResident: React.FC = () => {
       }
     }
 
-    if (!formData.address.trim()) {
-      newErrors.address = 'Address is required';
-    } else if (!isValidAddress(formData.address)) {
-      newErrors.address = 'Address must be at least 10 characters and contain valid characters only';
+    // Address validation — structured fields
+    if (!formData.address.regionCode) {
+      newErrors.address = 'Please select a Region';
+    } else if (!formData.address.cityCode) {
+      newErrors.address = 'Please select a City / Municipality';
+    } else if (!formData.address.barangayCode) {
+      newErrors.address = 'Please select a Barangay';
     }
 
     if (formData.contactNumber && !isValidContactNumber(formData.contactNumber)) {
@@ -445,8 +448,6 @@ const EditResident: React.FC = () => {
     let sanitizedValue = value;
     if (type === 'text' && ['lastName', 'firstName', 'middleName', 'religion'].includes(name)) {
       sanitizedValue = value.replace(/[^a-zA-ZñÑ\s\-\.\']/g, '');
-    } else if (name === 'address') {
-      sanitizedValue = value.replace(/[^a-zA-Z0-9ñÑ\s\-\.\,\#]/g, '');
     } else if (name === 'householdNumber') {
       sanitizedValue = value.replace(/[^a-zA-Z0-9\-]/g, '');
     } else if (name === 'contactNumber') {
@@ -467,18 +468,10 @@ const EditResident: React.FC = () => {
     const file = e.target.files?.[0] || null;
 
     switch (fieldName) {
-      case 'nationalIdFront':
-        setNationalIdFront(file);
-        break;
-      case 'nationalIdBack':
-        setNationalIdBack(file);
-        break;
-      case 'votersIdFront':
-        setVotersIdFront(file);
-        break;
-      case 'votersIdBack':
-        setVotersIdBack(file);
-        break;
+      case 'nationalIdFront': setNationalIdFront(file); break;
+      case 'nationalIdBack':  setNationalIdBack(file);  break;
+      case 'votersIdFront':   setVotersIdFront(file);   break;
+      case 'votersIdBack':    setVotersIdBack(file);    break;
     }
 
     if (errors[fieldName as keyof FormData]) {
@@ -487,60 +480,33 @@ const EditResident: React.FC = () => {
   };
 
   const handleRemoveExistingId = async (fieldName: string) => {
-    console.log('🗑️ Removing existing ID:', fieldName);
-    
-    // Get the URL field name
     const urlFieldName = `${fieldName}Url` as keyof FormData;
     const imageUrl = formData[urlFieldName] as string | undefined;
     
     if (imageUrl) {
       try {
-        console.log('🗑️ Deleting image from Supabase storage:', imageUrl);
-        
-        // Delete from Supabase storage using the full URL
         await deleteImage(imageUrl, 'resident-ids');
-        
-        console.log('✅ Image deleted from storage');
       } catch (error) {
         console.error('❌ Error deleting image from storage:', error);
-        // Continue anyway - we'll still remove the URL from the database
       }
     }
     
-    // Clear the URL field in formData
-    setFormData(prev => ({
-      ...prev,
-      [urlFieldName]: undefined
-    }));
-    
-    console.log('Removed:', urlFieldName);
+    setFormData(prev => ({ ...prev, [urlFieldName]: undefined }));
   };
 
   const handleRemoveNewFile = (fieldName: string) => {
-    console.log('🗑️ Removing new file:', fieldName);
-    
     switch (fieldName) {
-      case 'nationalIdFront':
-        setNationalIdFront(null);
-        break;
-      case 'nationalIdBack':
-        setNationalIdBack(null);
-        break;
-      case 'votersIdFront':
-        setVotersIdFront(null);
-        break;
-      case 'votersIdBack':
-        setVotersIdBack(null);
-        break;
+      case 'nationalIdFront': setNationalIdFront(null); break;
+      case 'nationalIdBack':  setNationalIdBack(null);  break;
+      case 'votersIdFront':   setVotersIdFront(null);   break;
+      case 'votersIdBack':    setVotersIdBack(null);    break;
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setSaving(true);
     setUploadingIds(true);
@@ -549,31 +515,14 @@ const EditResident: React.FC = () => {
       // Upload new ID images if provided
       let updatedIdUrls: any = {};
 
-      if (nationalIdFront) {
-        console.log('📤 Uploading National ID (Front)...');
-        updatedIdUrls.nationalIdFrontUrl = await uploadImage(nationalIdFront, 'resident-ids', 'national-ids/front');
-        console.log('✅ National ID (Front) uploaded');
-      }
-
-      if (nationalIdBack) {
-        console.log('📤 Uploading National ID (Back)...');
-        updatedIdUrls.nationalIdBackUrl = await uploadImage(nationalIdBack, 'resident-ids', 'national-ids/back');
-        console.log('✅ National ID (Back) uploaded');
-      }
-
-      if (votersIdFront) {
-        console.log('📤 Uploading Voter\'s ID (Front)...');
-        updatedIdUrls.votersIdFrontUrl = await uploadImage(votersIdFront, 'resident-ids', 'voters-ids/front');
-        console.log('✅ Voter\'s ID (Front) uploaded');
-      }
-
-      if (votersIdBack) {
-        console.log('📤 Uploading Voter\'s ID (Back)...');
-        updatedIdUrls.votersIdBackUrl = await uploadImage(votersIdBack, 'resident-ids', 'voters-ids/back');
-        console.log('✅ Voter\'s ID (Back) uploaded');
-      }
+      if (nationalIdFront) updatedIdUrls.nationalIdFrontUrl = await uploadImage(nationalIdFront, 'resident-ids', 'national-ids/front');
+      if (nationalIdBack)  updatedIdUrls.nationalIdBackUrl  = await uploadImage(nationalIdBack,  'resident-ids', 'national-ids/back');
+      if (votersIdFront)   updatedIdUrls.votersIdFrontUrl   = await uploadImage(votersIdFront,   'resident-ids', 'voters-ids/front');
+      if (votersIdBack)    updatedIdUrls.votersIdBackUrl    = await uploadImage(votersIdBack,    'resident-ids', 'voters-ids/back');
 
       setUploadingIds(false);
+
+      const addr = formData.address;
 
       // Build update data
       const updateData: any = {
@@ -584,7 +533,18 @@ const EditResident: React.FC = () => {
         birthday: formData.birthday,
         occupation: formData.occupation.trim(),
         status: formData.status,
-        address: formData.address.trim(),
+        // Store full address string + individual parts
+        address: addr.fullAddress,
+        addressRegion: addr.region,
+        addressRegionCode: addr.regionCode,
+        addressProvince: addr.province,
+        addressProvinceCode: addr.provinceCode,
+        addressCity: addr.city,
+        addressCityCode: addr.cityCode,
+        addressBarangay: addr.barangay,
+        addressBarangayCode: addr.barangayCode,
+        addressStreet: addr.street,
+        addressZipCode: addr.zipCode,
         contactNumber: formData.contactNumber.trim(),
         education: formData.education,
         religion: formData.religion.trim(),
@@ -619,16 +579,13 @@ const EditResident: React.FC = () => {
         updateData.votersIdBackUrl = formData.votersIdBackUrl || null;
       }
 
-      // Determine if registered voter
       const hasNationalId = updateData.nationalIdFrontUrl || updateData.nationalIdBackUrl;
-      const hasVotersId = updateData.votersIdFrontUrl || updateData.votersIdBackUrl;
+      const hasVotersId   = updateData.votersIdFrontUrl   || updateData.votersIdBackUrl;
       updateData.isRegisteredVoter = !!(hasNationalId || hasVotersId);
 
       console.log('💾 Updating resident in Firestore:', updateData);
       await updateDoc(doc(db, 'residents', id!), updateData);
 
-      console.log('✅ Done!');
-      
       const voterMessage = updateData.isRegisteredVoter ? ' Classified as registered voter.' : '';
       alert('✅ Resident updated successfully!' + voterMessage);
 
@@ -739,9 +696,9 @@ const EditResident: React.FC = () => {
       {(() => {
         let file: File | null = null;
         if (fieldName === 'nationalIdFront') file = nationalIdFront;
-        if (fieldName === 'nationalIdBack') file = nationalIdBack;
-        if (fieldName === 'votersIdFront') file = votersIdFront;
-        if (fieldName === 'votersIdBack') file = votersIdBack;
+        if (fieldName === 'nationalIdBack')  file = nationalIdBack;
+        if (fieldName === 'votersIdFront')   file = votersIdFront;
+        if (fieldName === 'votersIdBack')    file = votersIdBack;
 
         return file && (
           <div style={styles.filePreview}>
@@ -801,6 +758,7 @@ const EditResident: React.FC = () => {
 
         <div style={styles.formContainer}>
           <form onSubmit={handleSubmit} style={styles.form}>
+
             {/* Personal Information Section */}
             <div style={styles.section}>
               <h3 style={styles.sectionTitle}>
@@ -821,33 +779,24 @@ const EditResident: React.FC = () => {
               </div>
             </div>
 
-            {/* Contact & Address Section */}
+            {/* Address & Contact Section — now uses AddressInput */}
             <div style={styles.section}>
               <h3 style={styles.sectionTitle}>
                 <span style={styles.sectionIcon}>📍</span>
                 Address & Contact
               </h3>
 
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>
-                  Address <span style={styles.required}>*</span>
-                </label>
-                <input
-                  type="text"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleChange}
-                  style={{
-                    ...styles.input,
-                    ...(errors.address ? styles.inputError : {})
-                  }}
-                  required
-                  placeholder="Enter complete address (minimum 10 characters)"
-                />
-                {errors.address && <span style={styles.errorText}>{errors.address}</span>}
-              </div>
+              <AddressInput
+                value={formData.address}
+                onChange={addr => {
+                  setFormData(prev => ({ ...prev, address: addr }));
+                  if (errors.address) setErrors(prev => ({ ...prev, address: undefined }));
+                }}
+                error={errors.address}
+                required
+              />
 
-              <div style={styles.row}>
+              <div style={{ ...styles.row, marginTop: '20px' }}>
                 {renderField('Contact Number', 'contactNumber', 'tel', false, '09XX-XXX-XXXX')}
               </div>
             </div>
@@ -976,10 +925,7 @@ const EditResident: React.FC = () => {
                         type="text"
                         value={formData.householdNumber}
                         readOnly
-                        style={{
-                          ...styles.input,
-                          ...styles.readOnlyInput
-                        }}
+                        style={{ ...styles.input, ...styles.readOnlyInput }}
                         placeholder="Auto-generated household number"
                       />
                       <small style={styles.householdHint}>

@@ -48,6 +48,24 @@ const DocumentTemplate: React.FC<DocumentTemplateProps> = ({
     </div>
   );
 
+  const calculateAge = (birthday?: string): string => {
+    if (!birthday) return 'unknown age';
+    try {
+      const [year, month, day] = birthday.split('-').map(Number);
+      const birthDate = new Date(Date.UTC(year, month - 1, day));
+      const now = new Date();
+      let age = now.getFullYear() - birthDate.getUTCFullYear();
+      const monthDiff = now.getMonth() - birthDate.getUTCMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birthDate.getUTCDate())) {
+        age--;
+      }
+      return `${age} years old`;
+    } catch (err) {
+      console.error('⛔ Failed to parse birthday:', birthday);
+      return 'unknown age';
+    }
+  };
+
   const calculateYearsInBarangay = (movedInDate?: string): string => {
     if (!movedInDate) return 'an unspecified number of years';
 
@@ -72,7 +90,7 @@ const DocumentTemplate: React.FC<DocumentTemplateProps> = ({
       case 'Brgy Clearance':
         return (
           <p>
-            This is to certify that <strong>{fullName}</strong>, a {sex} born on <strong>{birthday}</strong>,
+            This is to certify that <strong>{fullName}</strong>, a {sex}, <strong>{calculateAge(birthday)}</strong>,
             residing at <strong>{address}</strong>, currently working as <strong>{occupation}</strong>, has no derogatory
             record as of this date. This Barangay Clearance is issued for the purpose of <em>{purpose}</em>.
           </p>

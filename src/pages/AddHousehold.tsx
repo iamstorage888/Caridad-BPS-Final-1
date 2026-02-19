@@ -28,6 +28,7 @@ const AddHousehold: React.FC = () => {
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [newHouseholdNumber, setNewHouseholdNumber] = useState('');
   const [householdOption, setHouseholdOption] = useState<'new' | 'existing'>('new');
+  const [unofficialHouseholdDetails, setUnofficialHouseholdDetails] = useState<{ number: string; residents: string[] }[]>([]);
 
   const navigate = useNavigate();
 
@@ -55,34 +56,47 @@ const AddHousehold: React.FC = () => {
     const highest = Math.max(...numericNumbers, 0);
     const nextNum = highest + 1;
     return `HH-${nextNum.toString().padStart(3, '0')}`;
-  }, []);
+}, []);
 
-  // Fetch official households and residents with household numbers
-  const fetchHouseholdData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Get official households
-      const householdSnapshot = await getDocs(collection(db, 'households'));
-      const officialNumbers = householdSnapshot.docs
-        .map(doc => doc.data().householdNumber)
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      
-      setOfficialHouseholds(officialNumbers);
+// Fetch official households and residents with household numbers
+const fetchHouseholdData = useCallback(async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    // Get official households
+    const householdSnapshot = await getDocs(collection(db, 'households'));
+    const officialNumbers = householdSnapshot.docs
+      .map(doc => doc.data().householdNumber)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    
+    setOfficialHouseholds(officialNumbers);
 
-      // Get residents with household numbers that aren't official yet
-      const residentsSnapshot = await getDocs(collection(db, 'residents'));
-      const allHouseholdNumbers = residentsSnapshot.docs
-        .map(doc => doc.data().householdNumber)
-        .filter(Boolean);
-      
-      const unofficialNumbers = Array.from(new Set(allHouseholdNumbers))
-        .filter(num => !officialNumbers.includes(num))
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      
-      setUnofficialHouseholds(unofficialNumbers);
+    // Get residents with household numbers that aren't official yet
+    const residentsSnapshot = await getDocs(collection(db, 'residents'));
+    const allHouseholdNumbers = residentsSnapshot.docs
+      .map(doc => doc.data().householdNumber)
+      .filter(Boolean);
+    
+    const unofficialNumbers = Array.from(new Set(allHouseholdNumbers))
+      .filter(num => !officialNumbers.includes(num))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    setUnofficialHouseholds(unofficialNumbers);
+
+    // Build details: for each unofficial number, find who belongs to it
+    const details = unofficialNumbers.map(num => {
+      const residents = residentsSnapshot.docs
+        .filter(doc => doc.data().householdNumber === num)
+        .map(doc => {
+          const d = doc.data();
+          return `${d.firstName || ''} ${d.middleName || ''} ${d.lastName || ''}`.replace(/\s+/g, ' ').trim();
+        });
+      return { number: num, residents };
+    });
+
+    setUnofficialHouseholdDetails(details);
 
       // Generate next household number
       const nextNumber = generateNextHouseholdNumber(officialNumbers);
@@ -331,16 +345,19 @@ const AddHousehold: React.FC = () => {
                   </div>
                 ) : (
                   <select
-                    value={formData.householdNumber}
-                    onChange={handleChange}
-                    name="householdNumber"
-                    style={styles.input}
-                  >
-                    <option value="">Select unofficial household to make official</option>
-                    {unofficialHouseholds.map((num, idx) => (
-                      <option key={idx} value={num}>{num}</option>
-                    ))}
-                  </select>
+  value={formData.householdNumber}
+  onChange={handleChange}
+  name="householdNumber"
+  style={styles.input}
+>
+  <option value="">Select unofficial household to make official</option>
+  {unofficialHouseholdDetails.map((detail, idx) => (
+    <option key={idx} value={detail.number}>
+      {detail.number} — {detail.residents.length > 0 ? detail.residents.join(', ') : 'No residents found'}
+    </option>
+  ))}
+</select>
+
                 )}
                 {errors.householdNumber && (
                   <span style={styles.errorText}>{errors.householdNumber}</span>

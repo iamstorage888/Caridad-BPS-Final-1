@@ -67,10 +67,6 @@ const EditHousehold: React.FC = () => {
       newErrors.householdName = 'Household name must be at least 2 characters';
     }
 
-    if (!formData.householdNumber.trim()) {
-      newErrors.householdNumber = 'Household number is required';
-    }
-
     if (!formData.purok) {
       newErrors.purok = 'Purok selection is required';
     }
@@ -83,7 +79,6 @@ const EditHousehold: React.FC = () => {
     if (!originalData) return false;
     return (
       formData.householdName !== originalData.householdName ||
-      formData.householdNumber !== originalData.householdNumber ||
       formData.purok !== originalData.purok
     );
   };
@@ -92,7 +87,6 @@ const EditHousehold: React.FC = () => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
 
-    // Clear error when user starts typing
     if (errors[name as keyof HouseholdData]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
@@ -118,7 +112,6 @@ const EditHousehold: React.FC = () => {
       const updatedData = {
         ...formData,
         householdName: formData.householdName.trim(),
-        householdNumber: formData.householdNumber.trim(),
         updatedAt: new Date().toISOString(),
       };
 
@@ -180,6 +173,18 @@ const EditHousehold: React.FC = () => {
                 Household Information
               </h3>
 
+              {/* Household Number - Read Only */}
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Household Number</label>
+                <div style={styles.readOnlyDisplay}>
+                  🏷️ {formData.householdNumber}
+                </div>
+                <small style={styles.readOnlyHint}>
+                  Household number cannot be changed
+                </small>
+              </div>
+
+              {/* Household Name */}
               <div style={styles.fieldGroup}>
                 <label style={styles.label}>
                   Household Name <span style={styles.required}>*</span>
@@ -201,53 +206,31 @@ const EditHousehold: React.FC = () => {
                 )}
               </div>
 
-              <div style={styles.row}>
-                <div style={styles.fieldGroup}>
-                  <label style={styles.label}>
-                    Household Number <span style={styles.required}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="householdNumber"
-                    value={formData.householdNumber}
-                    onChange={handleChange}
-                    style={{
-                      ...styles.input,
-                      ...(errors.householdNumber ? styles.inputError : {})
-                    }}
-                    placeholder="Enter household number"
-                    required
-                  />
-                  {errors.householdNumber && (
-                    <span style={styles.errorText}>{errors.householdNumber}</span>
-                  )}
-                </div>
-
-                <div style={styles.fieldGroup}>
-                  <label style={styles.label}>
-                    Purok <span style={styles.required}>*</span>
-                  </label>
-                  <select
-                    name="purok"
-                    value={formData.purok}
-                    onChange={handleChange}
-                    style={{
-                      ...styles.input,
-                      ...(errors.purok ? styles.inputError : {})
-                    }}
-                    required
-                  >
-                    <option value="">Select Purok</option>
-                    {[1, 2, 3, 4, 5, 6, 7].map(n => (
-                      <option key={n} value={`Purok ${n}`}>
-                        Purok {n}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.purok && (
-                    <span style={styles.errorText}>{errors.purok}</span>
-                  )}
-                </div>
+              {/* Purok */}
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>
+                  Purok <span style={styles.required}>*</span>
+                </label>
+                <select
+                  name="purok"
+                  value={formData.purok}
+                  onChange={handleChange}
+                  style={{
+                    ...styles.input,
+                    ...(errors.purok ? styles.inputError : {})
+                  }}
+                  required
+                >
+                  <option value="">Select Purok</option>
+                  {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                    <option key={n} value={`Purok ${n}`}>
+                      Purok {n}
+                    </option>
+                  ))}
+                </select>
+                {errors.purok && (
+                  <span style={styles.errorText}>{errors.purok}</span>
+                )}
               </div>
             </div>
 
@@ -394,12 +377,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginRight: '12px',
     fontSize: '20px',
   },
-  row: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-    gap: '20px',
-    marginBottom: '20px',
-  },
   fieldGroup: {
     display: 'flex',
     flexDirection: 'column',
@@ -433,6 +410,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '12px',
     marginTop: '4px',
     fontWeight: '500',
+  },
+  readOnlyDisplay: {
+    padding: '12px 16px',
+    fontSize: '14px',
+    borderRadius: '8px',
+    border: '2px solid #e2e8f0',
+    backgroundColor: '#f1f5f9',
+    color: '#64748b',
+    fontWeight: '600',
+    letterSpacing: '0.5px',
+  },
+  readOnlyHint: {
+    fontSize: '12px',
+    color: '#94a3b8',
+    marginTop: '4px',
+    fontStyle: 'italic',
   },
   actionSection: {
     paddingTop: '32px',

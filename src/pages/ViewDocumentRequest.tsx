@@ -372,7 +372,15 @@ const ViewDocument: React.FC = () => {
                   Approve Document
                 </button>
               )}
-              
+              {/* Add this button between Approve and Download */}
+<button
+  onClick={() => navigate(`/documents/edit/${id}`)}
+  style={styles.editButton}
+>
+  <span style={styles.buttonIcon}>✏️</span>
+  Edit
+</button>
+
               <button
                 onClick={downloadPDF}
                 disabled={isDownloading}
@@ -756,6 +764,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
   },
+
+  editButton: {
+  padding: '14px 28px',
+  fontSize: '16px',
+  fontWeight: '600',
+  color: 'white',
+  backgroundColor: '#f59e0b',
+  border: 'none',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.4)',
+},
+
 };
 
 export default ViewDocument;
